@@ -52,6 +52,16 @@ export interface BudgetAddition {
 	createdAt: string;
 }
 
+export interface BalanceAdjustment {
+	id: string;
+	roomId: string;
+	memberId: string;
+	amount: number; // positive = credit (adds to balance), negative = debit (subtracts)
+	description: string;
+	date: string;
+	createdAt: string;
+}
+
 export interface BudgetDataPoint {
 	date: string;
 	added: number; // cumulative budget added up to this date
@@ -72,6 +82,7 @@ export interface AppState {
 	members: Member[];
 	expenses: Expense[];
 	budgetAdditions: BudgetAddition[];
+	balanceAdjustments: BalanceAdjustment[];
 	error: string | null;
 }
 
@@ -87,6 +98,11 @@ export type AppAction =
 	| { type: "SET_EXPENSES"; payload: Expense[] }
 	| { type: "ADD_EXPENSE"; payload: Expense }
 	| { type: "REMOVE_EXPENSE"; payload: string }
+	| { type: "UPDATE_EXPENSE"; payload: Expense }
 	| { type: "SET_BUDGET_ADDITIONS"; payload: BudgetAddition[] }
 	| { type: "ADD_BUDGET_ADDITION"; payload: BudgetAddition }
-	| { type: "REMOVE_BUDGET_ADDITION"; payload: string };
+	| { type: "REMOVE_BUDGET_ADDITION"; payload: string }
+	| { type: "SET_BALANCE_ADJUSTMENTS"; payload: BalanceAdjustment[] }
+	| { type: "ADD_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment }
+	| { type: "REMOVE_BALANCE_ADJUSTMENT"; payload: string }
+	| { type: "UPDATE_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment };

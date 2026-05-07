@@ -12,6 +12,7 @@ import { useStore } from "@/lib/store";
 import { generateBudgetChartData } from "@/lib/chartUtils";
 import { BudgetOverviewChart } from "./BudgetOverviewChart";
 import { UserBalanceChart } from "./UserBalanceChart";
+import { RealBalanceChart } from "./RealBalanceChart";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -55,8 +56,7 @@ export function ChartsView() {
 									: "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400"
 							}
 						>
-							{isPositive ? "Budget remaining" : "Over budget"}
-							&nbsp;·&nbsp;
+							{isPositive ? "Budget remaining" : "Over budget"}{" "}
 							{formatCurrency(Math.abs(totalRemaining), currency)}
 						</Badge>
 					</CardAction>
@@ -66,11 +66,12 @@ export function ChartsView() {
 			{/* ── Tabbed content ───────────────────────────────────────────── */}
 			<CardContent className="pt-4">
 				<Tabs defaultValue="budget">
-					<TabsList className="mb-4 w-fit" variant='line'>
+					<TabsList className="mb-4 w-fit" variant="line">
 						<TabsTrigger value="budget">Group Budget</TabsTrigger>
 						<TabsTrigger value="balances">
 							Member Balances
 						</TabsTrigger>
+						<TabsTrigger value="real">Cash Flow</TabsTrigger>
 					</TabsList>
 
 					<TabsContent value="budget">
@@ -79,6 +80,10 @@ export function ChartsView() {
 
 					<TabsContent value="balances">
 						<UserBalanceChart />
+					</TabsContent>
+
+					<TabsContent value="real">
+						<RealBalanceChart />
 					</TabsContent>
 				</Tabs>
 			</CardContent>

@@ -6,11 +6,11 @@ import {
 	CartesianGrid,
 	ReferenceLine,
 } from "recharts";
-import { TrendingUp } from "lucide-react";
+import { TrendingDown, Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import {
-	generateBalanceChartData,
-	calculateCurrentBalances,
+	generateRealBalanceChartData,
+	calculateCurrentRealBalances,
 	calculateSettlements,
 	type Settlement,
 } from "@/lib/chartUtils";
@@ -26,7 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SettleUpPanel from "./SettleUpPanel";
 import { useMemo, useCallback } from "react";
-import AdjustUserBalance from "./AdjustUserBalance";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,13 +47,12 @@ function formatCurrency(value: number, currency: string): string {
 	}).format(value);
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────────────────────────
 
-export function UserBalanceChart() {
+export function RealBalanceChart() {
 	const { state, actions } = useStore();
 	const currency = state.room?.currency ?? "USD";
 
-	// Build chart config dynamically from members so legend labels + colors are correct
 	const chartConfig = useMemo<ChartConfig>(() => {
 		const config: ChartConfig = {};
 		for (const member of state.members) {
@@ -68,7 +66,7 @@ export function UserBalanceChart() {
 
 	const data = useMemo(
 		() =>
-			generateBalanceChartData(
+			generateRealBalanceChartData(
 				state.members,
 				state.expenses,
 				state.balanceAdjustments,
@@ -78,7 +76,7 @@ export function UserBalanceChart() {
 
 	const currentBalances = useMemo(
 		() =>
-			calculateCurrentBalances(
+			calculateCurrentRealBalances(
 				state.members,
 				state.expenses,
 				state.balanceAdjustments,
@@ -103,7 +101,6 @@ export function UserBalanceChart() {
 				(m) => m.id === settlement.toId,
 			);
 			if (!payer || !receiver) return;
-
 			const today = new Date().toISOString().split("T")[0];
 			await actions.addExpense({
 				description: `Settlement: ${payer.name} → ${receiver.name}`,
@@ -119,24 +116,47 @@ export function UserBalanceChart() {
 
 	const hasData = state.expenses.some((e) => e.source === "personal");
 
-	// ── Empty state ───────────────────────────────────────────────────────────
-
 	if (!hasData || state.members.length === 0) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-				<TrendingUp className="h-10 w-10 opacity-40" />
+				<TrendingDown className="h-10 w-10 opacity-40" />
 				<p className="font-medium">No expense data yet</p>
 				<p className="text-sm opacity-60">
-					Add personal expenses to track member balances
+					Add personal expenses to see cash flow
 				</p>
 			</div>
 		);
 	}
 
-	// ── Chart ─────────────────────────────────────────────────────────────────
-
 	return (
 		<div className="flex flex-col gap-4">
+			{/* ── Legend / explanation ─────────────────────────────────────── */}
+			<div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+				<Info className="size-3.5 shrink-0 mt-px text-muted-foreground" />
+				<p className="text-sm text-muted-foreground leading-relaxed">
+					<span className="font-medium text-foreground">
+						Cash flow view:
+					</span>{" "}
+					shows actual money spent out of each member's pocket.{" "}
+					<div>
+						<span className="text-red-600 dark:text-red-400 font-medium">
+							Negative
+						</span>{" "}
+						<span>= paid out of pocket (owed back)</span>
+					</div>
+					<div>
+						<span className="text-amber-600 dark:text-amber-400 font-medium">
+							Positive
+						</span>{" "}
+						<span>
+							= owes payment. Settles to zero when everyone has
+							paid.
+						</span>
+					</div>
+				</p>
+			</div>
+
+			{/* ── Area chart ───────────────────────────────────────────────── */}
 			<ChartContainer config={chartConfig} className="min-h-60 w-full">
 				<AreaChart
 					accessibilityLayer
@@ -185,7 +205,16 @@ export function UserBalanceChart() {
 												{chartConfig[String(name)]
 													?.label ?? String(name)}
 											</span>
-											<span className="font-mono font-medium tabular-nums">
+											<span
+												className={`font-mono font-medium tabular-nums ${
+													Number(value) < 0
+														? "text-red-600 dark:text-red-400"
+														: Number(value) > 0
+															? "text-amber-600 dark:text-amber-400"
+															: ""
+												}`}
+											>
+												{Number(value) > 0 ? "+" : ""}
 												{formatCurrency(
 													Number(value),
 													currency,
@@ -206,10 +235,8 @@ export function UserBalanceChart() {
 						strokeWidth={1.5}
 					/>
 
-					{/* Legend at the bottom */}
 					<ChartLegend content={<ChartLegendContent />} />
 
-					{/* One Area per member, colored with their assigned color */}
 					{state.members.map((member) => (
 						<Area
 							key={member.id}
@@ -219,53 +246,74 @@ export function UserBalanceChart() {
 							stroke={member.color}
 							strokeWidth={2}
 							fill={member.color}
-							fillOpacity={0.15}
+							fillOpacity={0.12}
 							dot={false}
 						/>
 					))}
 				</AreaChart>
 			</ChartContainer>
 
-			{/* Current balance summary */}
+			{/* ── Current real-balance summary ──────────────────────────────── */}
 			<div className="flex flex-wrap gap-2 px-1">
 				{state.members.map((member) => {
-					const balance = currentBalances[member.id] ?? 0;
-					const isOwed = balance >= 0;
+					const real = currentBalances[member.id] ?? 0;
+					const isOwed = real < -0.005; // paid more than fair share → owed back
+					const isOwes = real > 0.005; // hasn't paid fair share yet
+
+					const amountLabel = isOwed
+						? `Owed back ${formatCurrency(Math.abs(real), currency)}`
+						: isOwes
+							? `Owes ${formatCurrency(real, currency)}`
+							: "Settled";
+
 					return (
 						<Badge
 							key={member.id}
 							variant="outline"
-							className="gap-1.5 py-1 font-medium"
-							style={{
-								borderColor: `${member.color}55`,
-								backgroundColor: `${member.color}18`,
-								color: member.color,
-							}}
+							className={`gap-1.5 py-1 font-medium ${
+								isOwes
+									? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400"
+									: isOwed
+										? ""
+										: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-400"
+							}`}
+							style={
+								isOwed
+									? {
+											borderColor: `${member.color}55`,
+											backgroundColor: `${member.color}18`,
+											color: member.color,
+										}
+									: undefined
+							}
 						>
-							{/* Color dot */}
 							<span
 								className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
 								style={{ backgroundColor: member.color }}
 							/>
-							{member.name}
-							<span className="font-mono">
-								{isOwed ? "+" : ""}
-								{formatCurrency(balance, currency)}
+							<span
+								className="font-medium"
+								style={{ color: member.color }}
+							>
+								{member.name}
+							</span>
+							<span className="font-mono text-xs opacity-80">
+								{amountLabel}
 							</span>
 						</Badge>
 					);
 				})}
 			</div>
 
-			{/* Settle Up */}
 			<Separator />
+
+			{/* ── Settle up ─────────────────────────────────────────────────── */}
 			<SettleUpPanel
 				settlements={settlements}
 				members={state.members}
 				currency={currency}
 				onMarkAsPaid={handleMarkAsPaid}
 			/>
-			<AdjustUserBalance />
 		</div>
 	);
 }

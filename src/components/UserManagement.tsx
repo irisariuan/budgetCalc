@@ -1,5 +1,13 @@
-import * as React from "react";
-import { Pencil, Trash2, Plus, Check, X, Users } from "lucide-react";
+import {
+	Pencil,
+	Trash2,
+	Plus,
+	Check,
+	X,
+	Users,
+	SlidersHorizontal,
+    User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +21,13 @@ import {
 	CardAction,
 } from "@/components/ui/card";
 import { useStore } from "@/lib/store";
-import { MEMBER_COLORS, type Member } from "@/lib/types";
+import { calculateCurrentBalances } from "@/lib/chartUtils";
+import {
+	MEMBER_COLORS,
+	type Member,
+	type BalanceAdjustment,
+} from "@/lib/types";
+import { useState, useEffect, useMemo, type SubmitEvent } from "react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -72,10 +86,10 @@ interface EditRowProps {
 }
 
 function EditRow({ member, onSave, onCancel, isBusy }: EditRowProps) {
-	const [name, setName] = React.useState(member.name);
-	const [color, setColor] = React.useState(member.color);
+	const [name, setName] = useState(member.name);
+	const [color, setColor] = useState(member.color);
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = (e: SubmitEvent) => {
 		e.preventDefault();
 		const trimmed = name.trim();
 		if (!trimmed) return;
@@ -95,7 +109,7 @@ function EditRow({ member, onSave, onCancel, isBusy }: EditRowProps) {
 							backgroundColor: color,
 							color: getContrastColor(color),
 						}}
-						className="text-xs font-semibold"
+						className="text-sm font-semibold"
 					>
 						{getInitials(name) || "?"}
 					</AvatarFallback>
@@ -164,7 +178,7 @@ function DeleteConfirm({
 }: DeleteConfirmProps) {
 	return (
 		<div className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-			<p className="text-sm text-foreground">
+			<p className="text-foreground">
 				Remove <span className="font-medium">{member.name}</span> from
 				the trip?
 			</p>
@@ -206,11 +220,11 @@ function AddMemberForm({ onAdd, isBusy, usedColors }: AddMemberFormProps) {
 	const nextColor =
 		MEMBER_COLORS.find((c) => !usedColors.includes(c)) ?? MEMBER_COLORS[0];
 
-	const [name, setName] = React.useState("");
-	const [color, setColor] = React.useState(nextColor);
+	const [name, setName] = useState("");
+	const [color, setColor] = useState(nextColor);
 
 	// Keep color suggestion fresh when usedColors changes
-	React.useEffect(() => {
+	useEffect(() => {
 		const fresh =
 			MEMBER_COLORS.find((c) => !usedColors.includes(c)) ??
 			MEMBER_COLORS[0];
@@ -218,7 +232,7 @@ function AddMemberForm({ onAdd, isBusy, usedColors }: AddMemberFormProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [usedColors.length]);
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = (e: SubmitEvent) => {
 		e.preventDefault();
 		const trimmed = name.trim();
 		if (!trimmed) return;
@@ -231,7 +245,7 @@ function AddMemberForm({ onAdd, isBusy, usedColors }: AddMemberFormProps) {
 			onSubmit={handleSubmit}
 			className="flex flex-col gap-3 rounded-lg border border-dashed border-border p-3"
 		>
-			<Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+			<Label className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
 				Add member
 			</Label>
 
@@ -242,7 +256,7 @@ function AddMemberForm({ onAdd, isBusy, usedColors }: AddMemberFormProps) {
 							backgroundColor: color,
 							color: getContrastColor(color),
 						}}
-						className="text-xs font-semibold"
+						className="text-sm font-semibold"
 					>
 						{getInitials(name) || <Plus className="size-3.5" />}
 					</AvatarFallback>
@@ -285,16 +299,19 @@ function AddMemberForm({ onAdd, isBusy, usedColors }: AddMemberFormProps) {
 
 export function UserManagement() {
 	const { state, actions } = useStore();
-	const { members, status } = state;
+	const { members, status, expenses, balanceAdjustments } = state;
+	const currency = state.room?.currency ?? "USD";
 
 	const isBusy = status === "loading";
 
-	// Track which member is being edited or pending deletion
-	const [editingId, setEditingId] = React.useState<string | null>(null);
-	const [deletingId, setDeletingId] = React.useState<string | null>(null);
+	// Track which member is being edited, pending deletion, or balance-adjusted
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const [adjustingId, setAdjustingId] = useState<string | null>(null);
 
 	const handleEdit = (id: string) => {
 		setDeletingId(null);
+		setAdjustingId(null);
 		setEditingId(id);
 	};
 
@@ -305,6 +322,7 @@ export function UserManagement() {
 
 	const handleDeleteRequest = (id: string) => {
 		setEditingId(null);
+		setAdjustingId(null);
 		setDeletingId(id);
 	};
 
@@ -316,6 +334,16 @@ export function UserManagement() {
 	const handleAdd = async (name: string, color: string) => {
 		await actions.addMember(name, color);
 	};
+
+	const currentBalances = useMemo(
+		() =>
+			calculateCurrentBalances(
+				members as Member[],
+				expenses,
+				balanceAdjustments as BalanceAdjustment[],
+			),
+		[members, expenses, balanceAdjustments],
+	);
 
 	const usedColors = (members as Member[]).map((m: Member) => m.color);
 
@@ -336,16 +364,21 @@ export function UserManagement() {
 			<CardContent className="space-y-2">
 				{/* Member list */}
 				{members.length === 0 ? (
-					<p className="py-4 text-center text-sm text-muted-foreground">
-						No members yet. Add someone below!
-					</p>
+					<div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+						<User className="size-8 opacity-30" />
+						<p className="text-sm">No members yet</p>
+						<p className="text-xs opacity-60">
+							Add members to start tracking expenses and balances
+						</p>
+					</div>
 				) : (
 					<ul className="space-y-1">
 						{(members as Member[]).map((member: Member) => (
 							<li key={member.id} className="space-y-1">
 								{/* ── Normal row ── */}
 								{editingId !== member.id &&
-									deletingId !== member.id && (
+									deletingId !== member.id &&
+									adjustingId !== member.id && (
 										<div className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-muted/50 transition-colors group">
 											<Avatar size="default">
 												<AvatarFallback
@@ -356,16 +389,15 @@ export function UserManagement() {
 															member.color,
 														),
 													}}
-													className="text-xs font-semibold"
+													className="text-sm font-semibold"
 												>
 													{getInitials(member.name)}
 												</AvatarFallback>
 											</Avatar>
 
-											<span className="flex-1 text-sm font-medium leading-none">
+											<span className="flex-1 font-medium leading-none">
 												{member.name}
 											</span>
-
 											<div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
 												<Button
 													type="button"
@@ -395,6 +427,32 @@ export function UserManagement() {
 													<Trash2 className="size-3.5" />
 												</Button>
 											</div>
+											{/* Balance badge */}
+											{(() => {
+												const bal =
+													currentBalances[
+														member.id
+													] ?? 0;
+												if (Math.abs(bal) < 0.005)
+													return null;
+												const isPositive = bal > 0;
+												return (
+													<span
+														className={`text-sm font-mono font-medium ${isPositive ? "text-emerald-600" : "text-destructive"}`}
+													>
+														{isPositive ? "+" : ""}
+														{new Intl.NumberFormat(
+															"en-US",
+															{
+																style: "currency",
+																currency,
+																minimumFractionDigits: 0,
+																maximumFractionDigits: 0,
+															},
+														).format(bal)}
+													</span>
+												);
+											})()}
 										</div>
 									)}
 

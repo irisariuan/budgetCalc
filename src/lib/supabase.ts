@@ -1,5 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Room, Member, BudgetAddition, Expense } from "./types";
+import type {
+	Room,
+	Member,
+	BudgetAddition,
+	BalanceAdjustment,
+	Expense,
+} from "./types";
 
 export type DbRoom = {
 	id: string;
@@ -21,6 +27,16 @@ export type DbBudgetAddition = {
 	room_id: string;
 	description: string | null;
 	amount: number;
+	date: string;
+	created_at: string;
+};
+
+export type DbBalanceAdjustment = {
+	id: string;
+	room_id: string;
+	member_id: string;
+	amount: number;
+	description: string;
 	date: string;
 	created_at: string;
 };
@@ -63,9 +79,19 @@ export type Database = {
 				>;
 				Relationships: [];
 			};
+			balance_adjustments: {
+				Row: DbBalanceAdjustment;
+				Insert: Omit<DbBalanceAdjustment, "created_at"> & {
+					created_at?: string;
+				};
+				Update: Partial<
+					Omit<DbBalanceAdjustment, "id" | "room_id" | "created_at">
+				>;
+				Relationships: [];
+			};
 			expenses: {
 				Row: DbExpense;
-				Insert: Omit<DbExpense, "created_at">;
+				Insert: Omit<DbExpense, "created_at"> & { created_at?: string };
 				Update: Partial<
 					Omit<DbExpense, "id" | "room_id" | "created_at">
 				>;
@@ -112,6 +138,20 @@ export function mapBudgetAddition(row: DbBudgetAddition): BudgetAddition {
 		roomId: row.room_id,
 		description: row.description ?? "",
 		amount: row.amount,
+		date: row.date,
+		createdAt: row.created_at,
+	};
+}
+
+export function mapBalanceAdjustment(
+	row: DbBalanceAdjustment,
+): BalanceAdjustment {
+	return {
+		id: row.id,
+		roomId: row.room_id,
+		memberId: row.member_id,
+		amount: row.amount,
+		description: row.description,
 		date: row.date,
 		createdAt: row.created_at,
 	};

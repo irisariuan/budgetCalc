@@ -1,5 +1,11 @@
-import * as React from "react";
-import { PlaneTakeoff, Plus, LogIn, AlertCircle, Loader2 } from "lucide-react";
+import {
+	PlaneTakeoff,
+	Plus,
+	HouseHeart,
+	AlertCircle,
+	Loader2,
+	LogIn,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +24,9 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
+import { useEffect, useState, type ChangeEvent, type SubmitEvent } from "react";
+import { supabase } from "@/lib/supabase";
+import type { Room } from "@/lib/types";
 
 const CURRENCIES = [
 	{ code: "USD", label: "USD – US Dollar" },
@@ -40,12 +49,12 @@ export function RoomSetup() {
 	const { state, actions } = useStore();
 
 	// ── Create Room ──────────────────────────────────────────────────────────
-	const [roomName, setRoomName] = React.useState("");
-	const [currency, setCurrency] = React.useState("USD");
-	const [createError, setCreateError] = React.useState<string | null>(null);
-	const [isCreating, setIsCreating] = React.useState(false);
+	const [roomName, setRoomName] = useState("");
+	const [currency, setCurrency] = useState("USD");
+	const [createError, setCreateError] = useState<string | null>(null);
+	const [isCreating, setIsCreating] = useState(false);
 
-	const handleCreate = async (e: React.SubmitEvent) => {
+	const handleCreate = async (e: SubmitEvent) => {
 		e.preventDefault();
 		setCreateError(null);
 
@@ -66,30 +75,43 @@ export function RoomSetup() {
 	};
 
 	// ── Join Room ────────────────────────────────────────────────────────────
-	const [roomCode, setRoomCode] = React.useState("");
-	const [joinError, setJoinError] = React.useState<string | null>(null);
-	const [isJoining, setIsJoining] = React.useState(false);
+	const [roomCode, setRoomCode] = useState("");
+	const [joinError, setJoinError] = useState<string | null>(null);
+	const [isJoining, setIsJoining] = useState(false);
 
-	const handleRoomCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		// Only allow alphanumeric, uppercase
-		const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-		if (val.length <= 6) setRoomCode(val);
-	};
+	const [rooms, setRooms] = useState<Room[] | null>(null);
 
-	const handleJoin = async (e: React.SubmitEvent) => {
-		e.preventDefault();
+	useEffect(() => {
+		if (!supabase) return;
+		(async () => {
+			const { data, error } = await supabase.from("rooms").select("*");
+			if (error) {
+				return setRooms([]);
+			}
+			setRooms(
+				data.map((v) => ({
+					createdAt: v.created_at,
+					currency: v.currency,
+					id: v.id,
+					name: v.name,
+				})),
+			);
+		})();
+	}, [supabase]);
+
+	async function joinRoomById(roomId: string) {
 		setJoinError(null);
 
-		if (roomCode.length !== 6) {
+		if (roomId.length !== 6) {
 			setJoinError("Room code must be exactly 6 characters.");
 			return;
 		}
 
 		setIsJoining(true);
 		try {
-			const success = await actions.joinRoom(roomCode);
+			const success = await actions.joinRoom(roomId);
 			if (success) {
-				pushRoomToUrl(roomCode);
+				pushRoomToUrl(roomId);
 			} else {
 				setJoinError("Room not found. Check the code and try again.");
 			}
@@ -98,6 +120,17 @@ export function RoomSetup() {
 		} finally {
 			setIsJoining(false);
 		}
+	}
+
+	const handleRoomCodeChange = (e: ChangeEvent<HTMLInputElement>) => {
+		// Only allow alphanumeric, uppercase
+		const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+		if (val.length <= 6) setRoomCode(val);
+	};
+
+	const handleJoin = async (e: SubmitEvent) => {
+		e.preventDefault();
+		await joinRoomById(roomCode);
 	};
 
 	const isBusy = isCreating || isJoining || state.status === "loading";
@@ -113,7 +146,7 @@ export function RoomSetup() {
 					<h1 className="text-3xl font-bold tracking-tight text-foreground">
 						BudgetCalc
 					</h1>
-					<p className="mt-1 text-sm text-muted-foreground">
+					<p className="mt-1 text-muted-foreground">
 						Track shared travel expenses
 					</p>
 				</div>
@@ -175,7 +208,7 @@ export function RoomSetup() {
 							</div>
 
 							{createError && (
-								<div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								<div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
 									<AlertCircle className="size-4 shrink-0" />
 									{createError}
 								</div>
@@ -206,7 +239,7 @@ export function RoomSetup() {
 				{/* Divider */}
 				<div className="flex items-center gap-3">
 					<div className="h-px flex-1 bg-border" />
-					<span className="text-xs text-muted-foreground">or</span>
+					<span className="text-sm text-muted-foreground">or</span>
 					<div className="h-px flex-1 bg-border" />
 				</div>
 
@@ -238,7 +271,7 @@ export function RoomSetup() {
 							</div>
 
 							{joinError && (
-								<div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								<div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
 									<AlertCircle className="size-4 shrink-0" />
 									{joinError}
 								</div>
@@ -265,6 +298,53 @@ export function RoomSetup() {
 							</Button>
 						</form>
 					</CardContent>
+				</Card>
+				<Card>
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2">
+							<HouseHeart className="size-4 text-primary" />
+							Room List
+						</CardTitle>
+						<CardDescription>
+							Rooms available to join are shown below
+						</CardDescription>
+						{rooms ? (
+							rooms.length > 0 ? (
+								<ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+									{rooms.map((room) => (
+										<li
+											key={room.id}
+											className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-accent cursor-pointer"
+											onClick={() => {
+												joinRoomById(room.id);
+											}}
+										>
+											<span>{room.name}</span>
+											<span className="text-muted-foreground">
+												{room.currency}
+											</span>
+										</li>
+									))}
+								</ul>
+							) : (
+								<div className="flex items-center gap-2 mt-2 text-muted-foreground">
+									<AlertCircle className="size-4 shrink-0" />
+									No rooms available.
+								</div>
+							)
+						) : supabase ? (
+							<div className="flex items-center gap-2 mt-2 text-muted-foreground">
+								<Loader2 className="size-4 animate-spin" />
+								Loading rooms…
+							</div>
+						) : (
+							<div className="flex items-center gap-2 mt-2 text-muted-foreground">
+								<AlertCircle className="size-4 shrink-0" />
+								You are now offline. Please check your
+								connection.
+							</div>
+						)}
+					</CardHeader>
 				</Card>
 			</div>
 		</div>

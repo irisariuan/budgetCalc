@@ -1,17 +1,48 @@
-import * as React from "react";
-import { Trash2, Receipt, ImageIcon, X, Users, User } from "lucide-react";
+import {
+	ArrowLeftRight,
+	Receipt,
+	ImageIcon,
+	X,
+	Users,
+	User,
+	ChevronRight,
+	SlidersHorizontal,
+	TrendingUp,
+	TrendingDown,
+} from "lucide-react";
 import { useStore } from "@/lib/store";
-import type { Expense, Member } from "@/lib/types";
+import type { Expense, BalanceAdjustment, Member } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { ExpenseDetailPanel } from "@/components/ExpenseDetailPanel";
+import { AdjustmentDetailPanel } from "@/components/AdjustmentDetailPanel";
+import { useEffect, useState, useMemo } from "react";
+
+// ─── Unified transaction item ─────────────────────────────────────────────────
+
+type TransactionItem =
+	| { kind: "expense"; data: Expense }
+	| { kind: "adjustment"; data: BalanceAdjustment };
+
+function txDate(item: TransactionItem): string {
+	return item.kind === "expense" ? item.data.date : item.data.date;
+}
+function txCreatedAt(item: TransactionItem): string {
+	return item.kind === "expense" ? item.data.createdAt : item.data.createdAt;
+}
 
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
 
-function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
-	// Close on Escape
-	React.useEffect(() => {
+function Lightbox({
+	src,
+	alt,
+	onClose,
+}: {
+	src: string;
+	alt: string;
+	onClose: () => void;
+}) {
+	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
 			if (e.key === "Escape") onClose();
 		};
@@ -41,15 +72,24 @@ function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: ()
 	);
 }
 
-// ─── Receipt thumbnail ─────────────────────────────────────────────────────────
+// ─── Receipt thumbnail ────────────────────────────────────────────────────────
 
-function ReceiptThumb({ url, description }: { url: string; description: string }) {
-	const [open, setOpen] = React.useState(false);
+function ReceiptThumb({
+	url,
+	description,
+}: {
+	url: string;
+	description: string;
+}) {
+	const [open, setOpen] = useState(false);
 	return (
 		<>
 			<button
 				type="button"
-				onClick={() => setOpen(true)}
+				onClick={(e) => {
+					e.stopPropagation();
+					setOpen(true);
+				}}
 				className="group relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted hover:border-primary/50 transition-colors"
 				title="View receipt"
 				aria-label="View receipt photo"
@@ -59,8 +99,11 @@ function ReceiptThumb({ url, description }: { url: string; description: string }
 					alt="Receipt"
 					className="h-full w-full object-cover"
 					onError={(e) => {
-						(e.currentTarget as HTMLImageElement).style.display = "none";
-						(e.currentTarget.nextSibling as HTMLElement).style.display = "flex";
+						(e.currentTarget as HTMLImageElement).style.display =
+							"none";
+						(
+							e.currentTarget.nextSibling as HTMLElement
+						).style.display = "flex";
 					}}
 				/>
 				<span
@@ -88,12 +131,10 @@ interface ExpenseRowProps {
 	expense: Expense;
 	members: Member[];
 	currency: string;
-	onDelete: (id: string) => void;
+	onClick: () => void;
 }
 
-function ExpenseRow({ expense, members, currency, onDelete }: ExpenseRowProps) {
-	const [confirmDelete, setConfirmDelete] = React.useState(false);
-
+function ExpenseRow({ expense, members, currency, onClick }: ExpenseRowProps) {
 	const paidBy = members.find((m) => m.id === expense.paidById);
 	const splitNames = expense.splitAmong
 		.map((id) => members.find((m) => m.id === id)?.name)
@@ -112,7 +153,12 @@ function ExpenseRow({ expense, members, currency, onDelete }: ExpenseRowProps) {
 	);
 
 	return (
-		<div className="flex items-start gap-3 px-4 py-3 group">
+		<button
+			type="button"
+			className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 active:bg-muted/60 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+			onClick={onClick}
+			aria-label={`View details for ${expense.description}`}
+		>
 			{/* Receipt thumbnail or icon */}
 			{expense.receiptUrl ? (
 				<ReceiptThumb
@@ -133,26 +179,29 @@ function ExpenseRow({ expense, members, currency, onDelete }: ExpenseRowProps) {
 					</span>
 					<Badge
 						variant="outline"
-						className={`shrink-0 text-[10px] px-1.5 py-0 h-4 ${
+						className={`shrink-0 text-xs px-1.5 py-0 h-4 ${
 							expense.source === "group"
 								? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/40 dark:bg-blue-950/30 dark:text-blue-400"
 								: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-400"
 						}`}
 					>
 						{expense.source === "group" ? (
-							<><Users className="size-2.5 mr-0.5" />Group</>
+							<>
+								<Users className="size-2.5 mr-0.5" />
+								Group
+							</>
 						) : (
-							<><User className="size-2.5 mr-0.5" />Personal</>
+							<>
+								<User className="size-2.5 mr-0.5" />
+								Personal
+							</>
 						)}
 					</Badge>
 				</div>
-
-				{/* Sub-info */}
 				<div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
 					<span>{dateLabel}</span>
 					{expense.source === "personal" && paidBy && (
 						<>
-							<span>·</span>
 							<span className="flex items-center gap-1">
 								<span
 									className="inline-block h-1.5 w-1.5 rounded-full"
@@ -164,69 +213,198 @@ function ExpenseRow({ expense, members, currency, onDelete }: ExpenseRowProps) {
 					)}
 					{expense.source === "personal" && splitNames.length > 0 && (
 						<>
-							<span>·</span>
-							<span>split {splitNames.length > 3
-								? `${splitNames.slice(0, 2).join(", ")} +${splitNames.length - 2}`
-								: splitNames.join(", ")}
+							<span>
+								split{" "}
+								{splitNames.length > 3
+									? `${splitNames.slice(0, 2).join(", ")} +${splitNames.length - 2}`
+									: splitNames.join(", ")}
 							</span>
 						</>
 					)}
 				</div>
 			</div>
 
-			{/* Amount + delete */}
+			{/* Amount + chevron */}
 			<div className="flex shrink-0 flex-col items-end gap-1">
 				<span className="font-mono text-sm font-semibold tabular-nums">
 					{fmt.format(expense.amount)}
 				</span>
-
-				{confirmDelete ? (
-					<div className="flex items-center gap-1">
-						<button
-							className="text-[10px] text-destructive hover:underline"
-							onClick={() => onDelete(expense.id)}
-						>
-							Confirm
-						</button>
-						<span className="text-[10px] text-muted-foreground">/</span>
-						<button
-							className="text-[10px] text-muted-foreground hover:underline"
-							onClick={() => setConfirmDelete(false)}
-						>
-							Cancel
-						</button>
-					</div>
-				) : (
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
-						onClick={() => setConfirmDelete(true)}
-						aria-label="Delete expense"
-					>
-						<Trash2 className="size-3.5" />
-					</Button>
-				)}
+				<ChevronRight className="size-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
 			</div>
-		</div>
+		</button>
 	);
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
+// ─── Adjustment row ───────────────────────────────────────────────────────────
 
-export function ExpenseList() {
-	const { state, actions } = useStore();
-	const { expenses, members } = state;
+interface AdjustmentRowProps {
+	adjustment: BalanceAdjustment;
+	members: Member[];
+	currency: string;
+	onClick: () => void;
+}
+
+function AdjustmentRow({
+	adjustment,
+	members,
+	currency,
+	onClick,
+}: AdjustmentRowProps) {
+	const member = members.find((m) => m.id === adjustment.memberId);
+	const isCredit = adjustment.amount >= 0;
+
+	const fmt = new Intl.NumberFormat("en-US", {
+		style: "currency",
+		currency,
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	});
+
+	const dateLabel = new Date(
+		`${adjustment.date}T00:00:00Z`,
+	).toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+
+	return (
+		<button
+			type="button"
+			className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 active:bg-muted/60 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+			onClick={onClick}
+			aria-label={`View adjustment: ${adjustment.description}`}
+		>
+			{/* Member avatar */}
+			<div
+				className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
+				style={{ backgroundColor: member?.color ?? "#94a3b8" }}
+			>
+				{member?.name.charAt(0).toUpperCase() ?? "?"}
+			</div>
+
+			{/* Main content */}
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<div className="flex items-center gap-2 min-w-0">
+					{adjustment.description && <span className="truncate text-sm font-medium leading-snug">
+						{adjustment.description}
+					</span>}
+					<Badge
+						variant="outline"
+						className="shrink-0 text-xs px-1.5 py-0 h-4 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400"
+					>
+						<SlidersHorizontal className="size-2.5 mr-0.5" />
+						Adjustment
+					</Badge>
+				</div>
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+					<span>{dateLabel}</span>
+					{member && (
+						<>
+							<span className="flex items-center gap-1">
+								<span
+									className="inline-block h-1.5 w-1.5 rounded-full"
+									style={{ backgroundColor: member.color }}
+								/>
+								{member.name}
+							</span>
+						</>
+					)}
+					<>
+						<span
+							className={
+								isCredit
+									? "text-emerald-600 dark:text-emerald-400"
+									: "text-red-600 dark:text-red-400"
+							}
+						>
+							{isCredit ? "credit" : "debit"}
+						</span>
+					</>
+				</div>
+			</div>
+
+			{/* Signed amount + icon + chevron */}
+			<div className="flex shrink-0 flex-col items-end gap-1">
+				<div className="flex items-center gap-1">
+					{isCredit ? (
+						<TrendingUp className="size-3 text-emerald-500" />
+					) : (
+						<TrendingDown className="size-3 text-red-500" />
+					)}
+					<span
+						className={`font-mono text-sm font-semibold tabular-nums ${
+							isCredit
+								? "text-emerald-600 dark:text-emerald-400"
+								: "text-red-600 dark:text-red-400"
+						}`}
+					>
+						{isCredit ? "+" : ""}
+						{fmt.format(adjustment.amount)}
+					</span>
+				</div>
+				<ChevronRight className="size-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+			</div>
+		</button>
+	);
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function TransactionList() {
+	const { state } = useStore();
+	const { expenses, members, balanceAdjustments } = state;
 	const currency = state.room?.currency ?? "USD";
 
-	const sorted = React.useMemo(
-		() => [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)),
-		[expenses],
+	// ── Detail panel state ────────────────────────────────────────────────────
+	const [selectedExpense, setSelectedExpense] = useState<Expense | null>(
+		null,
 	);
+	const [expenseDetailOpen, setExpenseDetailOpen] = useState(false);
 
-	const groupExpenses = sorted.filter((e) => e.source === "group");
-	const personalExpenses = sorted.filter((e) => e.source === "personal");
+	const [selectedAdjustment, setSelectedAdjustment] =
+		useState<BalanceAdjustment | null>(null);
+	const [adjustmentDetailOpen, setAdjustmentDetailOpen] = useState(false);
 
+	const handleExpenseClick = (expense: Expense) => {
+		setSelectedExpense(expense);
+		setExpenseDetailOpen(true);
+	};
+	const handleExpenseDetailOpenChange = (open: boolean) => {
+		setExpenseDetailOpen(open);
+		if (!open) setTimeout(() => setSelectedExpense(null), 300);
+	};
+
+	const handleAdjustmentClick = (adjustment: BalanceAdjustment) => {
+		setSelectedAdjustment(adjustment);
+		setAdjustmentDetailOpen(true);
+	};
+	const handleAdjustmentDetailOpenChange = (open: boolean) => {
+		setAdjustmentDetailOpen(open);
+		if (!open) setTimeout(() => setSelectedAdjustment(null), 300);
+	};
+
+	// ── Build unified sorted list ─────────────────────────────────────────────
+	const sorted = useMemo<TransactionItem[]>(() => {
+		const items: TransactionItem[] = [
+			...expenses.map(
+				(e): TransactionItem => ({ kind: "expense", data: e }),
+			),
+			...balanceAdjustments.map(
+				(a): TransactionItem => ({
+					kind: "adjustment",
+					data: a,
+				}),
+			),
+		];
+		return items.sort(
+			(a, b) =>
+				txDate(b).localeCompare(txDate(a)) ||
+				txCreatedAt(b).localeCompare(txCreatedAt(a)),
+		);
+	}, [expenses, balanceAdjustments]);
+
+	// ── Summary stats ─────────────────────────────────────────────────────────
 	const fmt = new Intl.NumberFormat("en-US", {
 		style: "currency",
 		currency,
@@ -234,65 +412,132 @@ export function ExpenseList() {
 		maximumFractionDigits: 0,
 	});
 
+	const groupExpenses = expenses.filter((e) => e.source === "group");
+	const personalExpenses = expenses.filter((e) => e.source === "personal");
 	const totalGroup = groupExpenses.reduce((s, e) => s + e.amount, 0);
 	const totalPersonal = personalExpenses.reduce((s, e) => s + e.amount, 0);
-
-	const withReceipts = sorted.filter((e) => e.receiptUrl).length;
+	const withReceipts = expenses.filter((e) => e.receiptUrl).length;
 
 	return (
-		<Card className="w-full shadow-sm">
-			<CardHeader className="border-b">
-				<CardTitle className="flex items-center gap-2">
-					<Receipt className="size-4" />
-					Expenses
-				</CardTitle>
-				{expenses.length > 0 && (
-					<div className="flex flex-wrap gap-1.5 mt-1">
-						<Badge variant="outline" className="text-[10px] h-4 px-1.5">
-							{expenses.length} total
-						</Badge>
-						{totalGroup > 0 && (
-							<Badge variant="outline" className="text-[10px] h-4 px-1.5 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/40 dark:bg-blue-950/30 dark:text-blue-400">
-								Group {fmt.format(totalGroup)}
-							</Badge>
-						)}
-						{totalPersonal > 0 && (
-							<Badge variant="outline" className="text-[10px] h-4 px-1.5 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-400">
-								Personal {fmt.format(totalPersonal)}
-							</Badge>
-						)}
-						{withReceipts > 0 && (
-							<Badge variant="outline" className="text-[10px] h-4 px-1.5">
-								{withReceipts} receipt{withReceipts !== 1 ? "s" : ""}
-							</Badge>
-						)}
-					</div>
-				)}
-			</CardHeader>
+		<>
+			<Card className="w-full shadow-sm">
+				<CardHeader className="border-b">
+					<CardTitle className="flex items-center gap-2">
+						<ArrowLeftRight className="size-4" />
+						Transactions
+					</CardTitle>
 
-			<CardContent className="p-0">
-				{sorted.length === 0 ? (
-					<div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
-						<Receipt className="size-8 opacity-30" />
-						<p className="text-sm">No expenses yet</p>
-						<p className="text-xs opacity-60">
-							Add your first expense using the button below
-						</p>
-					</div>
-				) : (
-					<div className="divide-y divide-border">
-						{sorted.map((expense) => (
-							<ExpenseRow
-								key={expense.id}
-								expense={expense}
-								members={members}
-								currency={currency}
-								onDelete={(id) => actions.removeExpense(id)}
-							/>
-						))}
-					</div>
-				)}
-			</CardContent>
-		</Card>
+					{sorted.length > 0 && (
+						<div className="flex flex-wrap gap-1.5 mt-1">
+							<Badge
+								variant="outline"
+								className="text-xs h-4 px-1.5"
+							>
+								{sorted.length} total
+							</Badge>
+							{expenses.length > 0 && (
+								<Badge
+									variant="outline"
+									className="text-xs h-4 px-1.5"
+								>
+									{expenses.length} expense
+									{expenses.length !== 1 ? "s" : ""}
+								</Badge>
+							)}
+							{balanceAdjustments.length > 0 && (
+								<Badge
+									variant="outline"
+									className="text-xs h-4 px-1.5 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400"
+								>
+									{balanceAdjustments.length} adjustment
+									{balanceAdjustments.length !== 1 ? "s" : ""}
+								</Badge>
+							)}
+							{totalGroup > 0 && (
+								<Badge
+									variant="outline"
+									className="text-xs h-4 px-1.5 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/40 dark:bg-blue-950/30 dark:text-blue-400"
+								>
+									Group {fmt.format(totalGroup)}
+								</Badge>
+							)}
+							{totalPersonal > 0 && (
+								<Badge
+									variant="outline"
+									className="text-xs h-4 px-1.5 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-400"
+								>
+									Personal {fmt.format(totalPersonal)}
+								</Badge>
+							)}
+							{withReceipts > 0 && (
+								<Badge
+									variant="outline"
+									className="text-xs h-4 px-1.5"
+								>
+									{withReceipts} receipt
+									{withReceipts !== 1 ? "s" : ""}
+								</Badge>
+							)}
+						</div>
+					)}
+				</CardHeader>
+
+				<CardContent className="p-0">
+					{sorted.length === 0 ? (
+						<div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+							<ArrowLeftRight className="size-8 opacity-30" />
+							<p className="text-sm">No transactions yet</p>
+							<p className="text-xs opacity-60">
+								Add expenses or balance adjustments to get
+								started
+							</p>
+						</div>
+					) : (
+						<div className="divide-y divide-border">
+							{sorted.map((item) =>
+								item.kind === "expense" ? (
+									<ExpenseRow
+										key={`expense-${item.data.id}`}
+										expense={item.data}
+										members={members}
+										currency={currency}
+										onClick={() =>
+											handleExpenseClick(item.data)
+										}
+									/>
+								) : (
+									<AdjustmentRow
+										key={`adjustment-${item.data.id}`}
+										adjustment={item.data}
+										members={members}
+										currency={currency}
+										onClick={() =>
+											handleAdjustmentClick(item.data)
+										}
+									/>
+								),
+							)}
+						</div>
+					)}
+				</CardContent>
+			</Card>
+
+			{/* Expense detail panel */}
+			<ExpenseDetailPanel
+				expense={selectedExpense}
+				open={expenseDetailOpen}
+				onOpenChange={handleExpenseDetailOpenChange}
+			/>
+
+			{/* Adjustment detail panel */}
+			<AdjustmentDetailPanel
+				adjustment={selectedAdjustment}
+				open={adjustmentDetailOpen}
+				onOpenChange={handleAdjustmentDetailOpenChange}
+			/>
+		</>
 	);
 }
+
+// Back-compat alias so App.tsx import still resolves without changes
+export { TransactionList as ExpenseList };

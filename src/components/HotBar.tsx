@@ -1,12 +1,25 @@
-import * as React from "react";
-import { Plus, PiggyBank, LogOut, Loader2 } from "lucide-react";
+import { Plus, PiggyBank, LogOut, Loader2, Clipboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useStore } from "@/lib/store";
 import { AddExpenseDialog } from "@/components/AddExpenseDialog";
 import { AddBudgetDialog } from "@/components/AddBudgetDialog";
+import {
+	HoverCard,
+	HoverCardContent,
+	HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { useState } from "react";
 
 // ─── Status dot ───────────────────────────────────────────────────────────────
+
+const statusText = {
+	loading: "Syncing changes...",
+	synced: "All changes synced",
+	offline: "Offline — changes saved locally",
+	error: "Sync error — retrying...",
+	idle: "Idle",
+};
 
 function StatusIndicator({ status }: { status: string }) {
 	if (status === "loading") {
@@ -16,31 +29,22 @@ function StatusIndicator({ status }: { status: string }) {
 	}
 	if (status === "synced") {
 		return (
-			<span
-				className="inline-block size-2 rounded-full shrink-0 bg-green-500"
-				title="Synced"
-			/>
+			<span className="inline-block size-3 rounded-full shrink-0 bg-green-500" />
 		);
 	}
 	if (status === "offline") {
 		return (
-			<span
-				className="inline-block size-2 rounded-full shrink-0 bg-orange-400"
-				title="Offline — changes saved locally"
-			/>
+			<span className="inline-block size-3 rounded-full shrink-0 bg-neutral-400 animate-pulse" />
 		);
 	}
 	if (status === "error") {
 		return (
-			<span
-				className="inline-block size-2 rounded-full shrink-0 bg-destructive"
-				title="Sync error"
-			/>
+			<span className="inline-block size-3 rounded-full shrink-0 bg-destructive" />
 		);
 	}
 	// idle / unknown
 	return (
-		<span className="inline-block size-2 rounded-full shrink-0 bg-muted-foreground/40" />
+		<span className="inline-block size-3 rounded-full shrink-0 bg-muted-foreground/40" />
 	);
 }
 
@@ -50,8 +54,8 @@ export function HotBar() {
 	const { state, actions } = useStore();
 	const { room, status } = state;
 
-	const [expenseOpen, setExpenseOpen] = React.useState(false);
-	const [budgetOpen, setBudgetOpen] = React.useState(false);
+	const [expenseOpen, setExpenseOpen] = useState(false);
+	const [budgetOpen, setBudgetOpen] = useState(false);
 
 	// Don't render if no active room
 	if (!room) return null;
@@ -70,16 +74,39 @@ export function HotBar() {
 				<div className="flex items-center gap-2 px-3 py-2.5 max-w-3xl mx-auto">
 					{/* ── Room info (left) ── */}
 					<div className="flex items-center gap-2 min-w-0 flex-1">
-						<StatusIndicator status={status} />
-						<span className="text-sm font-medium truncate leading-none">
+						<HoverCard>
+							<HoverCardTrigger className="flex items-center">
+								<StatusIndicator status={status} />
+							</HoverCardTrigger>
+							<HoverCardContent>
+								<p>{statusText[status] || status}</p>
+							</HoverCardContent>
+						</HoverCard>
+						<span className="font-medium truncate leading-none">
 							{room.name}
 						</span>
 						<Badge
 							variant="outline"
-							className="font-mono text-[0.7rem] shrink-0 tracking-widest"
+							className="font-mono shrink-0 tracking-widest"
+							onClick={(e) => {
+								const range = document.createRange();
+								range.selectNodeContents(e.currentTarget);
+								const sel = window.getSelection();
+								sel?.removeAllRanges();
+								sel?.addRange(range);
+							}}
 						>
 							{room.id}
 						</Badge>
+						<Button
+							variant="outline"
+							size="icon-sm"
+							onClick={() => {
+								navigator.clipboard.writeText(room.id);
+							}}
+						>
+							<Clipboard />
+						</Button>
 					</div>
 
 					{/* ── Action buttons (center-right) ── */}

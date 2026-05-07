@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useStore } from "@/lib/store";
 import type { ExpenseSource } from "@/lib/types";
 import {
@@ -11,14 +10,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MemberSelect } from "./MemberSelect";
+import { ImagePlus, X, AlertCircle, CalendarIcon } from "lucide-react";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { ImagePlus, X, AlertCircle } from "lucide-react";
+	useRef,
+	useState,
+	type ChangeEvent,
+	useEffect,
+	useCallback,
+	type SubmitEvent,
+	type DragEvent,
+} from "react";
+import { format, parseISO } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 
 const MAX_FILE_SIZE_MB = 5;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -32,9 +41,9 @@ interface ReceiptUploaderProps {
 }
 
 function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
-	const inputRef = React.useRef<HTMLInputElement>(null);
-	const [error, setError] = React.useState<string | null>(null);
-	const [dragging, setDragging] = React.useState(false);
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [dragging, setDragging] = useState(false);
 
 	const handleFile = (f: File) => {
 		setError(null);
@@ -50,17 +59,17 @@ function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
 		onChange(f, url);
 	};
 
-	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+	const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
 		if (f) handleFile(f);
 		// reset so same file can be re-selected
 		e.target.value = "";
 	};
 
-	const handleDrop = (e: React.DragEvent) => {
+	const handleDrop = (e: DragEvent) => {
 		e.preventDefault();
 		setDragging(false);
-		const f = e.dataTransfer.files[0];
+		const f = e.dataTransfer?.files[0];
 		if (f) handleFile(f);
 	};
 
@@ -88,7 +97,7 @@ function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
 				>
 					<X className="size-3.5" />
 				</button>
-				<div className="absolute bottom-1.5 left-2 text-xs text-white/80 font-medium truncate max-w-[80%]">
+				<div className="absolute bottom-1.5 left-2 text-sm text-white/80 font-medium truncate max-w-[80%]">
 					{file?.name}
 				</div>
 			</div>
@@ -106,7 +115,7 @@ function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
 				}}
 				onDragLeave={() => setDragging(false)}
 				onDrop={handleDrop}
-				className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed h-24 text-sm transition-colors ${
+				className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed h-24 transition-colors ${
 					dragging
 						? "border-primary bg-primary/5 text-primary"
 						: "border-input text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
@@ -114,12 +123,12 @@ function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
 			>
 				<ImagePlus className="size-5 opacity-60" />
 				<span>Click or drag to attach receipt</span>
-				<span className="text-xs opacity-60">
-					JPEG, PNG, WebP · max {MAX_FILE_SIZE_MB} MB
+				<span className="text-sm opacity-60">
+					JPEG, PNG, WebP (Max {MAX_FILE_SIZE_MB} MB)
 				</span>
 			</button>
 			{error && (
-				<div className="flex items-center gap-1.5 text-xs text-destructive">
+				<div className="flex items-center gap-1.5 text-sm text-destructive">
 					<AlertCircle className="size-3.5 shrink-0" />
 					{error}
 				</div>
@@ -158,27 +167,25 @@ export function AddExpenseDialog({
 	const { members } = state;
 
 	// Form state
-	const [description, setDescription] = React.useState("");
-	const [amount, setAmount] = React.useState("");
-	const [date, setDate] = React.useState(getTodayString);
-	const [source, setSource] = React.useState<ExpenseSource>("group");
-	const [paidById, setPaidById] = React.useState("");
-	const [splitAmong, setSplitAmong] = React.useState<string[]>([]);
-	const [receiptFile, setReceiptFile] = React.useState<File | null>(null);
-	const [receiptPreview, setReceiptPreview] = React.useState<string | null>(
-		null,
-	);
-	const [errors, setErrors] = React.useState<Record<string, string>>({});
-	const [isSubmitting, setIsSubmitting] = React.useState(false);
+	const [description, setDescription] = useState("");
+	const [amount, setAmount] = useState("");
+	const [date, setDate] = useState(getTodayString);
+	const [source, setSource] = useState<ExpenseSource>("group");
+	const [paidById, setPaidById] = useState("");
+	const [splitAmong, setSplitAmong] = useState<string[]>([]);
+	const [receiptFile, setReceiptFile] = useState<File | null>(null);
+	const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+	const [errors, setErrors] = useState<Record<string, string>>({});
+	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	// Pre-select all members when dialog opens
-	React.useEffect(() => {
+	useEffect(() => {
 		if (open) {
 			setSplitAmong(members.map((m) => m.id));
 		}
 	}, [open, members]);
 
-	const resetForm = React.useCallback(() => {
+	const resetForm = useCallback(() => {
 		setDescription("");
 		setAmount("");
 		setDate(getTodayString());
@@ -238,7 +245,7 @@ export function AddExpenseDialog({
 
 	// ── Submit ─────────────────────────────────────────────────────────────────
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: SubmitEvent) => {
 		e.preventDefault();
 		const errs = validate();
 		if (Object.keys(errs).length > 0) {
@@ -291,7 +298,7 @@ export function AddExpenseDialog({
 							autoComplete="off"
 						/>
 						{errors.description && (
-							<p className="text-xs text-destructive">
+							<p className="text-sm text-destructive">
 								{errors.description}
 							</p>
 						)}
@@ -314,7 +321,7 @@ export function AddExpenseDialog({
 							}}
 						/>
 						{errors.amount && (
-							<p className="text-xs text-destructive">
+							<p className="text-sm text-destructive">
 								{errors.amount}
 							</p>
 						)}
@@ -322,13 +329,35 @@ export function AddExpenseDialog({
 
 					{/* ── Date ── */}
 					<div className="space-y-1.5">
-						<Label htmlFor="exp-date">Date</Label>
-						<Input
-							id="exp-date"
-							type="date"
-							value={date}
-							onChange={(e) => setDate(e.target.value)}
-						/>
+						<Label>Date</Label>
+						<Popover>
+							<PopoverTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									className="w-full justify-start text-left font-normal"
+								>
+									<CalendarIcon className="mr-2 size-4 opacity-60" />
+									{date
+										? format(parseISO(date), "PPP")
+										: "Pick a date"}
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent
+								className="w-auto p-0"
+								align="start"
+							>
+								<Calendar
+									mode="single"
+									selected={date ? parseISO(date) : undefined}
+									onSelect={(d) =>
+										setDate(
+											d ? format(d, "yyyy-MM-dd") : "",
+										)
+									}
+								/>
+							</PopoverContent>
+						</Popover>
 					</div>
 
 					{/* ── Source toggle ── */}
@@ -338,7 +367,7 @@ export function AddExpenseDialog({
 							<button
 								type="button"
 								onClick={() => setSource("group")}
-								className={`px-3 text-sm font-medium transition-colors ${
+								className={`px-3 font-medium transition-colors ${
 									source === "group"
 										? "bg-primary text-primary-foreground"
 										: "bg-transparent text-muted-foreground hover:bg-muted/60"
@@ -349,7 +378,7 @@ export function AddExpenseDialog({
 							<button
 								type="button"
 								onClick={() => setSource("personal")}
-								className={`px-3 text-sm font-medium transition-colors border-l border-input ${
+								className={`px-3 font-medium transition-colors border-l border-input ${
 									source === "personal"
 										? "bg-primary text-primary-foreground"
 										: "bg-transparent text-muted-foreground hover:bg-muted/60"
@@ -358,7 +387,7 @@ export function AddExpenseDialog({
 								Personal
 							</button>
 						</div>
-						<p className="text-xs text-muted-foreground">
+						<p className="text-sm text-muted-foreground">
 							{source === "group"
 								? "Deducted from the shared group fund."
 								: "Paid by a member and split among selected."}
@@ -371,7 +400,8 @@ export function AddExpenseDialog({
 							{/* Paid by */}
 							<div className="space-y-1.5">
 								<Label>Paid by</Label>
-								<Select
+								<MemberSelect
+									members={members}
 									value={paidById}
 									onValueChange={(val) => {
 										setPaidById(val);
@@ -381,27 +411,9 @@ export function AddExpenseDialog({
 												paidBy: "",
 											}));
 									}}
-								>
-									<SelectTrigger className="w-full">
-										<SelectValue placeholder="Select member…" />
-									</SelectTrigger>
-									<SelectContent>
-										{members.map((m) => (
-											<SelectItem key={m.id} value={m.id}>
-												<span
-													className="inline-block size-2 rounded-full shrink-0"
-													style={{
-														backgroundColor:
-															m.color,
-													}}
-												/>
-												{m.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+								/>
 								{errors.paidBy && (
-									<p className="text-xs text-destructive">
+									<p className="text-sm text-destructive">
 										{errors.paidBy}
 									</p>
 								)}
@@ -414,7 +426,7 @@ export function AddExpenseDialog({
 									<button
 										type="button"
 										onClick={toggleAll}
-										className="text-xs text-primary hover:underline underline-offset-2 transition-colors"
+										className="text-sm text-primary hover:underline underline-offset-2 transition-colors"
 									>
 										{allSelected
 											? "Deselect all"
@@ -425,7 +437,7 @@ export function AddExpenseDialog({
 								{/* Member checkboxes */}
 								<div className="rounded-lg border border-input divide-y divide-border overflow-hidden">
 									{members.length === 0 ? (
-										<p className="px-3 py-2.5 text-sm text-muted-foreground text-center">
+										<p className="px-3 py-2.5 text-muted-foreground text-center">
 											No members in this room yet.
 										</p>
 									) : (
@@ -463,7 +475,7 @@ export function AddExpenseDialog({
 																m.color,
 														}}
 													/>
-													<span className="text-sm flex-1">
+													<span className="flex-1">
 														{m.name}
 													</span>
 												</label>
@@ -473,14 +485,14 @@ export function AddExpenseDialog({
 								</div>
 
 								{errors.splitAmong && (
-									<p className="text-xs text-destructive">
+									<p className="text-sm text-destructive">
 										{errors.splitAmong}
 									</p>
 								)}
 
 								{/* Split preview */}
 								{splitCount > 0 && amountNum > 0 && (
-									<p className="text-xs text-muted-foreground px-0.5">
+									<p className="text-sm text-muted-foreground px-0.5">
 										Splits into{" "}
 										<span className="font-semibold text-foreground">
 											{splitCount} share

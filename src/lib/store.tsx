@@ -6,6 +6,7 @@ import React, {
 	useMemo,
 	useReducer,
 	useRef,
+    type ReactNode,
 } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
@@ -15,13 +16,21 @@ import {
 	mapMember,
 	mapExpense,
 	mapBudgetAddition,
+	mapBalanceAdjustment,
 	uploadReceiptFile,
+	deleteReceiptFile,
 	fileToDataUrl,
 } from "@/lib/supabase";
-import type { DbMember, DbExpense, DbBudgetAddition } from "@/lib/supabase";
+import type {
+	DbMember,
+	DbExpense,
+	DbBudgetAddition,
+	DbBalanceAdjustment,
+} from "@/lib/supabase";
 import type {
 	AppAction,
 	AppState,
+	BalanceAdjustment,
 	BudgetAddition,
 	Expense,
 	Member,
@@ -35,6 +44,7 @@ interface LocalRoomData {
 	members: Member[];
 	expenses: Expense[];
 	budgetAdditions: BudgetAddition[];
+	balanceAdjustments: BalanceAdjustment[];
 	lastUpdated: string;
 }
 
@@ -66,12 +76,43 @@ interface StoreActions {
 		receiptFile?: File | null;
 	}) => Promise<void>;
 	removeExpense: (expenseId: string) => Promise<void>;
+	updateExpense: (
+		expenseId: string,
+		data: {
+			description: string;
+			amount: number;
+			date: string;
+			source: "group" | "personal";
+			paidById: string | null;
+			splitAmong: string[];
+			receiptFile: File | null;
+			receiptUrl: string | null;
+		},
+	) => Promise<void>;
+	restoreExpense: (expense: Expense) => Promise<void>;
 	addBudgetAddition: (data: {
 		description: string;
 		amount: number;
 		date: string;
 	}) => Promise<void>;
 	removeBudgetAddition: (id: string) => Promise<void>;
+	addBalanceAdjustment: (data: {
+		memberId: string;
+		amount: number;
+		description: string;
+		date: string;
+	}) => Promise<void>;
+	removeBalanceAdjustment: (id: string) => Promise<void>;
+	updateBalanceAdjustment: (
+		adjustmentId: string,
+		data: {
+			memberId: string;
+			amount: number;
+			description: string;
+			date: string;
+		},
+	) => Promise<void>;
+	restoreBalanceAdjustment: (adjustment: BalanceAdjustment) => Promise<void>;
 }
 
 interface StoreContextValue {
@@ -143,6 +184,7 @@ const initialState: AppState = {
 	members: [],
 	expenses: [],
 	budgetAdditions: [],
+	balanceAdjustments: [],
 	error: null,
 };
 
@@ -181,6 +223,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 				...state,
 				expenses: state.expenses.filter((e) => e.id !== action.payload),
 			};
+		case "UPDATE_EXPENSE":
+			return {
+				...state,
+				expenses: state.expenses.map((e) =>
+					e.id === action.payload.id ? action.payload : e,
+				),
+			};
 		case "SET_BUDGET_ADDITIONS":
 			return { ...state, budgetAdditions: action.payload };
 		case "ADD_BUDGET_ADDITION":
@@ -195,6 +244,30 @@ function reducer(state: AppState, action: AppAction): AppState {
 					(b) => b.id !== action.payload,
 				),
 			};
+		case "SET_BALANCE_ADJUSTMENTS":
+			return { ...state, balanceAdjustments: action.payload };
+		case "ADD_BALANCE_ADJUSTMENT":
+			return {
+				...state,
+				balanceAdjustments: [
+					...state.balanceAdjustments,
+					action.payload,
+				],
+			};
+		case "REMOVE_BALANCE_ADJUSTMENT":
+			return {
+				...state,
+				balanceAdjustments: state.balanceAdjustments.filter(
+					(b) => b.id !== action.payload,
+				),
+			};
+		case "UPDATE_BALANCE_ADJUSTMENT":
+			return {
+				...state,
+				balanceAdjustments: state.balanceAdjustments.map((a) =>
+					a.id === action.payload.id ? action.payload : a,
+				),
+			};
 		default:
 			return state;
 	}
@@ -206,7 +279,7 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
+export function StoreProvider({ children }: { children: ReactNode }) {
 	const [state, dispatch] = useReducer(reducer, {
 		...initialState,
 		status: isOnline ? "idle" : "offline",
@@ -312,6 +385,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 					});
 				},
 			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "expenses",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "UPDATE_EXPENSE",
+						payload: mapExpense(payload.new as DbExpense),
+					});
+				},
+			)
 			// ── budget_additions ──────────────────────────────────────────────────
 			.on(
 				"postgres_changes",
@@ -345,6 +433,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 					});
 				},
 			)
+			// ── balance_adjustments ───────────────────────────────────────────────────
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "balance_adjustments",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "ADD_BALANCE_ADJUSTMENT",
+						payload: mapBalanceAdjustment(
+							payload.new as DbBalanceAdjustment,
+						),
+					});
+				},
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "DELETE",
+					schema: "public",
+					table: "balance_adjustments",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "REMOVE_BALANCE_ADJUSTMENT",
+						payload: (payload.old as { id: string }).id,
+					});
+				},
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "balance_adjustments",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "UPDATE_BALANCE_ADJUSTMENT",
+						payload: mapBalanceAdjustment(
+							payload.new as DbBalanceAdjustment,
+						),
+					});
+				},
+			)
 			.subscribe();
 
 		channelRef.current = channel;
@@ -372,14 +510,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 				return false;
 			}
 
-			const [membersRes, expensesRes, budgetRes] = await Promise.all([
-				supabase.from("members").select("*").eq("room_id", roomId),
-				supabase.from("expenses").select("*").eq("room_id", roomId),
-				supabase
-					.from("budget_additions")
-					.select("*")
-					.eq("room_id", roomId),
-			]);
+			const [membersRes, expensesRes, budgetRes, adjustmentsRes] =
+				await Promise.all([
+					supabase.from("members").select("*").eq("room_id", roomId),
+					supabase.from("expenses").select("*").eq("room_id", roomId),
+					supabase
+						.from("budget_additions")
+						.select("*")
+						.eq("room_id", roomId),
+					supabase
+						.from("balance_adjustments")
+						.select("*")
+						.eq("room_id", roomId),
+				]);
 
 			dispatch({ type: "SET_ROOM", payload: mapRoom(roomRow) });
 			dispatch({
@@ -393,6 +536,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 			dispatch({
 				type: "SET_BUDGET_ADDITIONS",
 				payload: (budgetRes.data ?? []).map(mapBudgetAddition),
+			});
+			dispatch({
+				type: "SET_BALANCE_ADJUSTMENTS",
+				payload: (adjustmentsRes.data ?? []).map(mapBalanceAdjustment),
 			});
 			dispatch({ type: "SET_STATUS", payload: "synced" });
 
@@ -429,6 +576,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 				dispatch({
 					type: "SET_BUDGET_ADDITIONS",
 					payload: roomData.budgetAdditions,
+				});
+				dispatch({
+					type: "SET_BALANCE_ADJUSTMENTS",
+					payload: roomData.balanceAdjustments ?? [],
 				});
 				dispatch({ type: "SET_STATUS", payload: "offline" });
 			}
@@ -469,6 +620,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 					dispatch({ type: "SET_MEMBERS", payload: [] });
 					dispatch({ type: "SET_EXPENSES", payload: [] });
 					dispatch({ type: "SET_BUDGET_ADDITIONS", payload: [] });
+					dispatch({ type: "SET_BALANCE_ADJUSTMENTS", payload: [] });
 					dispatch({ type: "SET_STATUS", payload: "synced" });
 					subscribeToRoom(id);
 				} else {
@@ -476,6 +628,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 					dispatch({ type: "SET_MEMBERS", payload: [] });
 					dispatch({ type: "SET_EXPENSES", payload: [] });
 					dispatch({ type: "SET_BUDGET_ADDITIONS", payload: [] });
+					dispatch({ type: "SET_BALANCE_ADJUSTMENTS", payload: [] });
 					dispatch({ type: "SET_STATUS", payload: "offline" });
 
 					const data = readLocalData();
@@ -484,6 +637,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 						members: [],
 						expenses: [],
 						budgetAdditions: [],
+						balanceAdjustments: [],
 						lastUpdated: now,
 					};
 					writeLocalData(data);
@@ -513,6 +667,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 				dispatch({
 					type: "SET_BUDGET_ADDITIONS",
 					payload: roomData.budgetAdditions,
+				});
+				dispatch({
+					type: "SET_BALANCE_ADJUSTMENTS",
+					payload: roomData.balanceAdjustments ?? [],
 				});
 				dispatch({ type: "SET_STATUS", payload: "offline" });
 				pushRoomToUrl(roomId);
@@ -693,7 +851,110 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 				}
 			},
 
-			// ── addBudgetAddition ──────────────────────────────────────────────────
+			// ── restoreExpense (undo delete) ───────────────────────────────────────────
+			restoreExpense: async (expense) => {
+				const { room, expenses } = stateRef.current;
+				if (!room) return;
+
+				if (supabase) {
+					const { error } = await supabase.from("expenses").upsert({
+						id: expense.id,
+						room_id: expense.roomId,
+						description: expense.description,
+						amount: expense.amount,
+						date: expense.date,
+						source: expense.source,
+						paid_by_id: expense.paidById,
+						split_among: expense.splitAmong,
+						receipt_url: expense.receiptUrl,
+						created_at: expense.createdAt,
+					});
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Real-time INSERT handler will dispatch ADD_EXPENSE.
+				} else {
+					// Only restore if not already present
+					if (expenses.find((e) => e.id === expense.id)) return;
+					dispatch({ type: "ADD_EXPENSE", payload: expense });
+					saveRoomToLocalStorage(room.id, {
+						expenses: [...expenses, expense],
+					});
+				}
+			},
+
+			// ── updateExpense ───────────────────────────────────────────────────────
+			updateExpense: async (expenseId, data) => {
+				const { room, expenses } = stateRef.current;
+				if (!room) return;
+
+				const existing = expenses.find((e) => e.id === expenseId);
+				if (!existing) return;
+
+				// Handle receipt changes
+				let receiptUrl: string | null = data.receiptUrl;
+
+				if (data.receiptFile) {
+					// New file: upload and optionally delete old
+					if (supabase) {
+						receiptUrl = await uploadReceiptFile(
+							room.id,
+							expenseId,
+							data.receiptFile,
+						);
+					} else {
+						try {
+							receiptUrl = await fileToDataUrl(data.receiptFile);
+						} catch {
+							// keep existing
+						}
+					}
+					if (existing.receiptUrl && supabase) {
+						await deleteReceiptFile(existing.receiptUrl);
+					}
+				} else if (data.receiptUrl === null && existing.receiptUrl) {
+					// Receipt explicitly cleared
+					if (supabase) await deleteReceiptFile(existing.receiptUrl);
+					receiptUrl = null;
+				}
+
+				const updated: Expense = {
+					...existing,
+					description: data.description,
+					amount: data.amount,
+					date: data.date,
+					source: data.source,
+					paidById: data.paidById,
+					splitAmong: data.splitAmong,
+					receiptUrl,
+				};
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("expenses")
+						.update({
+							description: updated.description,
+							amount: updated.amount,
+							date: updated.date,
+							source: updated.source,
+							paid_by_id: updated.paidById,
+							split_among: updated.splitAmong,
+							receipt_url: updated.receiptUrl,
+						})
+						.eq("id", expenseId);
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Realtime UPDATE handler will dispatch UPDATE_EXPENSE.
+				} else {
+					dispatch({ type: "UPDATE_EXPENSE", payload: updated });
+					saveRoomToLocalStorage(room.id, {
+						expenses: expenses.map((e) =>
+							e.id === expenseId ? updated : e,
+						),
+					});
+				}
+			},
+
+			// ── addBudgetAddition ──────────────────────────────────────
 			addBudgetAddition: async (additionData) => {
 				const { room, budgetAdditions } = stateRef.current;
 				if (!room) return;
@@ -751,6 +1012,151 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 					saveRoomToLocalStorage(room.id, {
 						budgetAdditions: budgetAdditions.filter(
 							(b) => b.id !== id,
+						),
+					});
+				}
+			},
+
+			// ── addBalanceAdjustment ────────────────────────────────────────────
+			addBalanceAdjustment: async (data) => {
+				const { room, balanceAdjustments } = stateRef.current;
+				if (!room) return;
+
+				const id = crypto.randomUUID();
+				const now = new Date().toISOString();
+				const adjustment: BalanceAdjustment = {
+					id,
+					roomId: room.id,
+					memberId: data.memberId,
+					amount: data.amount,
+					description: data.description,
+					date: data.date,
+					createdAt: now,
+				};
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("balance_adjustments")
+						.insert({
+							id,
+							room_id: room.id,
+							member_id: data.memberId,
+							amount: data.amount,
+							description: data.description,
+							date: data.date,
+						});
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Real-time INSERT will dispatch ADD_BALANCE_ADJUSTMENT.
+				} else {
+					dispatch({
+						type: "ADD_BALANCE_ADJUSTMENT",
+						payload: adjustment,
+					});
+					saveRoomToLocalStorage(room.id, {
+						balanceAdjustments: [...balanceAdjustments, adjustment],
+					});
+				}
+			},
+
+			// ── removeBalanceAdjustment ─────────────────────────────────────────
+			removeBalanceAdjustment: async (id) => {
+				const { room, balanceAdjustments } = stateRef.current;
+				if (!room) return;
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("balance_adjustments")
+						.delete()
+						.eq("id", id);
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Real-time DELETE will dispatch REMOVE_BALANCE_ADJUSTMENT.
+				} else {
+					dispatch({
+						type: "REMOVE_BALANCE_ADJUSTMENT",
+						payload: id,
+					});
+					saveRoomToLocalStorage(room.id, {
+						balanceAdjustments: balanceAdjustments.filter(
+							(b) => b.id !== id,
+						),
+					});
+				}
+			},
+
+			// ── restoreBalanceAdjustment (undo delete) ─────────────────────────────────
+			restoreBalanceAdjustment: async (adjustment) => {
+				const { room, balanceAdjustments } = stateRef.current;
+				if (!room) return;
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("balance_adjustments")
+						.upsert({
+							id: adjustment.id,
+							room_id: adjustment.roomId,
+							member_id: adjustment.memberId,
+							amount: adjustment.amount,
+							description: adjustment.description,
+							date: adjustment.date,
+							created_at: adjustment.createdAt,
+						});
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Real-time INSERT handler will dispatch ADD_BALANCE_ADJUSTMENT.
+				} else {
+					if (balanceAdjustments.find((a) => a.id === adjustment.id))
+						return;
+					dispatch({
+						type: "ADD_BALANCE_ADJUSTMENT",
+						payload: adjustment,
+					});
+					saveRoomToLocalStorage(room.id, {
+						balanceAdjustments: [...balanceAdjustments, adjustment],
+					});
+				}
+			},
+
+			// ── updateBalanceAdjustment ───────────────────────────────────────────
+			updateBalanceAdjustment: async (adjustmentId, data) => {
+				const { room, balanceAdjustments } = stateRef.current;
+				if (!room) return;
+
+				const existing = balanceAdjustments.find(
+					(a) => a.id === adjustmentId,
+				);
+				if (!existing) return;
+
+				const updated: BalanceAdjustment = {
+					...existing,
+					memberId: data.memberId,
+					amount: data.amount,
+					description: data.description,
+					date: data.date,
+				};
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("balance_adjustments")
+						.update({
+							member_id: updated.memberId,
+							amount: updated.amount,
+							description: updated.description,
+							date: updated.date,
+						})
+						.eq("id", adjustmentId);
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Realtime UPDATE handler will dispatch UPDATE_BALANCE_ADJUSTMENT.
+				} else {
+					dispatch({
+						type: "UPDATE_BALANCE_ADJUSTMENT",
+						payload: updated,
+					});
+					saveRoomToLocalStorage(room.id, {
+						balanceAdjustments: balanceAdjustments.map((a) =>
+							a.id === adjustmentId ? updated : a,
 						),
 					});
 				}

@@ -1,4 +1,5 @@
 import type {
+	BalanceAdjustment,
 	BudgetAddition,
 	BudgetDataPoint,
 	BalanceDataPoint,
@@ -99,41 +100,51 @@ export function generateBudgetChartData(
 export function generateBalanceChartData(
 	members: Member[],
 	expenses: Expense[],
+	adjustments: BalanceAdjustment[] = [],
 ): BalanceDataPoint[] {
 	const personalExpenses = expenses.filter((e) => e.source === "personal");
 
-	// Zero anchor – used when there are no personal expenses.
+	// Zero anchor – used when there are no events at all.
 	const buildZeroPoint = (date: string): BalanceDataPoint => {
 		const point: BalanceDataPoint = { date };
 		for (const m of members) point[m.id] = 0;
 		return point;
 	};
 
-	if (personalExpenses.length === 0) {
+	if (personalExpenses.length === 0 && adjustments.length === 0) {
 		return [buildZeroPoint(todayStr())];
 	}
 
 	// Group personal expenses by date (YYYY-MM-DD).
-	const dailyMap = new Map<string, Expense[]>();
+	const dailyExpenseMap = new Map<string, Expense[]>();
 	for (const expense of personalExpenses) {
-		const list = dailyMap.get(expense.date) ?? [];
+		const list = dailyExpenseMap.get(expense.date) ?? [];
 		list.push(expense);
-		dailyMap.set(expense.date, list);
+		dailyExpenseMap.set(expense.date, list);
 	}
 
-	const sortedDates = Array.from(dailyMap.keys()).sort();
+	// Group adjustments by date.
+	const dailyAdjMap = new Map<string, BalanceAdjustment[]>();
+	for (const adj of adjustments) {
+		const list = dailyAdjMap.get(adj.date) ?? [];
+		list.push(adj);
+		dailyAdjMap.set(adj.date, list);
+	}
+
+	// Merge all event dates into a single sorted list.
+	const allDates = Array.from(
+		new Set([...dailyExpenseMap.keys(), ...dailyAdjMap.keys()]),
+	).sort();
 
 	// Running balances for every known member, initialised to zero.
 	const balances: Record<string, number> = {};
 	for (const m of members) balances[m.id] = 0;
 
-	// Prepend a zero anchor the day before the first personal expense.
-	const result: BalanceDataPoint[] = [
-		buildZeroPoint(dayBefore(sortedDates[0])),
-	];
+	// Prepend a zero anchor the day before the earliest event.
+	const result: BalanceDataPoint[] = [buildZeroPoint(dayBefore(allDates[0]))];
 
-	for (const date of sortedDates) {
-		const dayExpenses = dailyMap.get(date)!;
+	for (const date of allDates) {
+		const dayExpenses = dailyExpenseMap.get(date) ?? [];
 
 		for (const expense of dayExpenses) {
 			if (expense.splitAmong.length === 0) continue;
@@ -149,6 +160,14 @@ export function generateBalanceChartData(
 				if (memberId in balances) {
 					balances[memberId] -= share;
 				}
+			}
+		}
+
+		// Apply any balance adjustments for this date.
+		const dayAdjustments = dailyAdjMap.get(date) ?? [];
+		for (const adjustment of dayAdjustments) {
+			if (adjustment.memberId in balances) {
+				balances[adjustment.memberId] += adjustment.amount;
 			}
 		}
 
@@ -182,8 +201,9 @@ export interface Settlement {
 export function calculateSettlements(
 	members: Member[],
 	expenses: Expense[],
+	adjustments: BalanceAdjustment[] = [],
 ): Settlement[] {
-	const balances = calculateCurrentBalances(members, expenses);
+	const balances = calculateCurrentBalances(members, expenses, adjustments);
 
 	// Build mutable creditor / debtor lists (amounts always positive here)
 	const creditors: { id: string; amount: number }[] = [];
@@ -238,6 +258,7 @@ export function calculateSettlements(
 export function calculateCurrentBalances(
 	members: Member[],
 	expenses: Expense[],
+	adjustments: BalanceAdjustment[] = [],
 ): Record<string, number> {
 	const balances: Record<string, number> = {};
 	for (const m of members) balances[m.id] = 0;
@@ -258,5 +279,56 @@ export function calculateCurrentBalances(
 		}
 	}
 
+	for (const adj of adjustments) {
+		if (adj.memberId in balances) {
+			balances[adj.memberId] += adj.amount;
+		}
+	}
+
 	return balances;
+}
+
+// ─── Real (cash-flow) balances ────────────────────────────────────────────────
+
+/**
+ * Negated view of {@link calculateCurrentBalances}.
+ *
+ * Sign convention (cash-flow perspective):
+ *   Negative → member paid money out of pocket (is owed money back).
+ *   Positive → member owes money (has received value but hasn't paid yet).
+ *   Zero     → fully settled.
+ *
+ * After a settlement payment the payer's balance drops and the receiver's
+ * balance rises toward zero, reflecting actual cash movement.
+ */
+export function calculateCurrentRealBalances(
+	members: Member[],
+	expenses: Expense[],
+	adjustments: BalanceAdjustment[] = [],
+): Record<string, number> {
+	const optimistic = calculateCurrentBalances(members, expenses, adjustments);
+	return Object.fromEntries(
+		Object.entries(optimistic).map(([id, v]) => [id, -v]),
+	);
+}
+
+/**
+ * Negated view of {@link generateBalanceChartData}.
+ *
+ * Produces the same time-series shape but with all member balance values
+ * negated, so the chart shows who has paid out of pocket over time.
+ */
+export function generateRealBalanceChartData(
+	members: Member[],
+	expenses: Expense[],
+	adjustments: BalanceAdjustment[] = [],
+): BalanceDataPoint[] {
+	const raw = generateBalanceChartData(members, expenses, adjustments);
+	return raw.map((point) => {
+		const negated: BalanceDataPoint = { date: point.date };
+		for (const m of members) {
+			negated[m.id] = -((point[m.id] as number) ?? 0);
+		}
+		return negated;
+	});
 }

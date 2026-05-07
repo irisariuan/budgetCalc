@@ -1,4 +1,3 @@
-import * as React from "react";
 import { PlaneTakeoff } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
 import { RoomSetup } from "@/components/RoomSetup";
@@ -6,6 +5,7 @@ import { ChartsView } from "@/components/ChartsView";
 import { UserManagement } from "@/components/UserManagement";
 import { ExpenseList } from "@/components/ExpenseList";
 import { HotBar } from "@/components/HotBar";
+import { Toaster } from "@/components/ui/sonner";
 
 // ─── Inner app (must live inside StoreProvider) ───────────────────────────────
 
@@ -32,10 +32,10 @@ function AppInner() {
 						<PlaneTakeoff className="size-4" />
 					</div>
 					<div className="flex items-baseline gap-2 min-w-0">
-						<span className="text-sm font-bold tracking-tight text-foreground">
+						<span className="font-bold tracking-tight text-foreground">
 							BudgetCalc
 						</span>
-						<span className="text-sm text-muted-foreground truncate">
+						<span className="text-muted-foreground truncate">
 							/ {room.name}
 						</span>
 					</div>
@@ -51,6 +51,9 @@ function AppInner() {
 
 			{/* Sticky bottom action bar */}
 			<HotBar />
+
+			{/* Toast notifications (e.g. undo after delete) */}
+			<Toaster position="bottom-center" richColors />
 		</>
 	);
 }

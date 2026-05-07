@@ -86,8 +86,8 @@ export function BudgetOverviewChart() {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
 				<Wallet className="h-10 w-10 opacity-40" />
-				<p className="text-sm font-medium">No budget data yet</p>
-				<p className="text-xs opacity-60">
+				<p className="font-medium">No budget data yet</p>
+				<p className="text-sm opacity-60">
 					Add a budget or group expenses to see the overview
 				</p>
 			</div>
@@ -100,7 +100,7 @@ export function BudgetOverviewChart() {
 		<div className="flex flex-col gap-4">
 			{/* Summary header */}
 			<div className="flex items-center justify-between">
-				<span className="text-sm text-muted-foreground">
+				<span className="text-muted-foreground">
 					Cumulative budget over time
 				</span>
 				<Badge
@@ -111,8 +111,7 @@ export function BudgetOverviewChart() {
 							: "border-red-200 bg-red-50 text-red-700 dark:border-red-800/40 dark:bg-red-950/40 dark:text-red-400"
 					}
 				>
-					{isPositive ? "Remaining" : "Over budget"}
-					&nbsp;·&nbsp;
+					{isPositive ? "Remaining" : "Over budget"}{" "}
 					{formatCurrency(Math.abs(totalRemaining), currency)}
 				</Badge>
 			</div>
