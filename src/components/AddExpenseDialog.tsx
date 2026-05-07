@@ -28,121 +28,10 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import ReceiptEditor, { type Receipt } from "./ReceiptEditor";
 
 const MAX_FILE_SIZE_MB = 5;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-
-// ─── Receipt uploader ─────────────────────────────────────────────────────────
-
-interface ReceiptUploaderProps {
-	file: File | null;
-	preview: string | null;
-	onChange: (file: File | null, preview: string | null) => void;
-}
-
-function ReceiptUploader({ file, preview, onChange }: ReceiptUploaderProps) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [dragging, setDragging] = useState(false);
-
-	const handleFile = (f: File) => {
-		setError(null);
-		if (!ACCEPTED_TYPES.includes(f.type)) {
-			setError("Only JPEG, PNG, WebP, or HEIC images are allowed.");
-			return;
-		}
-		if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-			setError(`File must be under ${MAX_FILE_SIZE_MB} MB.`);
-			return;
-		}
-		const url = URL.createObjectURL(f);
-		onChange(f, url);
-	};
-
-	const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-		const f = e.target.files?.[0];
-		if (f) handleFile(f);
-		// reset so same file can be re-selected
-		e.target.value = "";
-	};
-
-	const handleDrop = (e: DragEvent) => {
-		e.preventDefault();
-		setDragging(false);
-		const f = e.dataTransfer?.files[0];
-		if (f) handleFile(f);
-	};
-
-	const handleRemove = () => {
-		if (preview && preview.startsWith("blob:"))
-			URL.revokeObjectURL(preview);
-		onChange(null, null);
-		setError(null);
-	};
-
-	if (preview) {
-		return (
-			<div className="relative rounded-lg overflow-hidden border border-border h-36">
-				<img
-					src={preview}
-					alt="Receipt preview"
-					className="w-full h-full object-cover"
-				/>
-				<div className="absolute inset-0 bg-black/20" />
-				<button
-					type="button"
-					onClick={handleRemove}
-					className="absolute top-1.5 right-1.5 flex items-center justify-center size-6 rounded-full bg-background/90 text-foreground hover:bg-background transition-colors shadow"
-					aria-label="Remove photo"
-				>
-					<X className="size-3.5" />
-				</button>
-				<div className="absolute bottom-1.5 left-2 text-sm text-white/80 font-medium truncate max-w-[80%]">
-					{file?.name}
-				</div>
-			</div>
-		);
-	}
-
-	return (
-		<div className="space-y-1.5">
-			<button
-				type="button"
-				onClick={() => inputRef.current?.click()}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setDragging(true);
-				}}
-				onDragLeave={() => setDragging(false)}
-				onDrop={handleDrop}
-				className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed h-24 transition-colors ${
-					dragging
-						? "border-primary bg-primary/5 text-primary"
-						: "border-input text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
-				}`}
-			>
-				<ImagePlus className="size-5 opacity-60" />
-				<span>Click or drag to attach receipt</span>
-				<span className="text-sm opacity-60">
-					JPEG, PNG, WebP (Max {MAX_FILE_SIZE_MB} MB)
-				</span>
-			</button>
-			{error && (
-				<div className="flex items-center gap-1.5 text-sm text-destructive">
-					<AlertCircle className="size-3.5 shrink-0" />
-					{error}
-				</div>
-			)}
-			<input
-				ref={inputRef}
-				type="file"
-				accept={ACCEPTED_TYPES.join(",")}
-				className="sr-only"
-				onChange={handleInputChange}
-			/>
-		</div>
-	);
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,8 +62,7 @@ export function AddExpenseDialog({
 	const [source, setSource] = useState<ExpenseSource>("group");
 	const [paidById, setPaidById] = useState("");
 	const [splitAmong, setSplitAmong] = useState<string[]>([]);
-	const [receiptFile, setReceiptFile] = useState<File | null>(null);
-	const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+	const [receipts, setReceipts] = useState<Receipt[]>([]);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -192,12 +80,14 @@ export function AddExpenseDialog({
 		setSource("group");
 		setPaidById("");
 		setSplitAmong(members.map((m) => m.id));
-		if (receiptPreview?.startsWith("blob:"))
-			URL.revokeObjectURL(receiptPreview);
-		setReceiptFile(null);
-		setReceiptPreview(null);
+		if (receipts.length > 0) {
+			for (const r of receipts) {
+				if (r.url.startsWith("blob:")) URL.revokeObjectURL(r.url);
+			}
+		}
+		setReceipts([]);
 		setErrors({});
-	}, [members, receiptPreview]);
+	}, [members, receipts]);
 
 	const handleOpenChange = (val: boolean) => {
 		if (!val) resetForm();
@@ -261,7 +151,7 @@ export function AddExpenseDialog({
 				source,
 				paidById: source === "personal" ? paidById : null,
 				splitAmong: source === "personal" ? splitAmong : [],
-				receiptFile,
+				receipts
 			});
 			resetForm();
 			onOpenChange(false);
@@ -517,13 +407,9 @@ export function AddExpenseDialog({
 								(optional)
 							</span>
 						</Label>
-						<ReceiptUploader
-							file={receiptFile}
-							preview={receiptPreview}
-							onChange={(f, p) => {
-								setReceiptFile(f);
-								setReceiptPreview(p);
-							}}
+						<ReceiptEditor
+							receipts={receipts}
+							onChange={setReceipts}
 						/>
 					</div>
 

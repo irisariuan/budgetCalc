@@ -39,7 +39,7 @@ export interface Expense {
 	source: ExpenseSource;
 	paidById: string | null; // member id if personal, null if from group budget
 	splitAmong: string[]; // array of member ids who share this expense
-	receiptUrl: string | null;
+	receiptUrl: string[];
 	createdAt: string;
 }
 

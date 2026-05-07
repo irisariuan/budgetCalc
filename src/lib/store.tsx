@@ -6,7 +6,7 @@ import React, {
 	useMemo,
 	useReducer,
 	useRef,
-    type ReactNode,
+	type ReactNode,
 } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
@@ -19,7 +19,7 @@ import {
 	mapBalanceAdjustment,
 	uploadReceiptFile,
 	deleteReceiptFile,
-	fileToDataUrl,
+	filesToDataUrl,
 } from "@/lib/supabase";
 import type {
 	DbMember,
@@ -36,6 +36,7 @@ import type {
 	Member,
 	Room,
 } from "@/lib/types";
+import type { Receipt } from "@/components/ReceiptEditor";
 
 // ─── Local-storage schema ─────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ interface StoreActions {
 		source: "group" | "personal";
 		paidById?: string | null;
 		splitAmong: string[];
-		receiptFile?: File | null;
+		receipts: Receipt[];
 	}) => Promise<void>;
 	removeExpense: (expenseId: string) => Promise<void>;
 	updateExpense: (
@@ -85,8 +86,7 @@ interface StoreActions {
 			source: "group" | "personal";
 			paidById: string | null;
 			splitAmong: string[];
-			receiptFile: File | null;
-			receiptUrl: string | null;
+			receipts: Receipt[];
 		},
 	) => Promise<void>;
 	restoreExpense: (expense: Expense) => Promise<void>;
@@ -773,21 +773,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				const now = new Date().toISOString();
 
 				// ── Handle receipt file ─────────────────────────────────────────
-				let receiptUrl: string | null = null;
-				if (expenseData.receiptFile) {
+				let receiptUrls = new Set<string>(
+					expenseData.receipts.map((r) => r.url),
+				);
+				if (expenseData.receipts.length > 0) {
 					if (supabase) {
 						// Upload to Supabase Storage
-						receiptUrl = await uploadReceiptFile(
+						const urls = await uploadReceiptFile(
 							room.id,
 							id,
-							expenseData.receiptFile,
+							expenseData.receipts
+								.map((v) => v.file)
+								.filter((v) => !!v),
 						);
+						if (urls)
+							for (const url of urls) {
+								receiptUrls.add(url);
+							}
 					} else {
 						// Offline: store as base64 data URL in localStorage
 						try {
-							receiptUrl = await fileToDataUrl(
-								expenseData.receiptFile,
+							const urls = await filesToDataUrl(
+								expenseData.receipts
+									.map((v) => v.file)
+									.filter((v) => !!v),
 							);
+							for (const url of urls) {
+								receiptUrls.add(url);
+							}
 						} catch {
 							// skip receipt if conversion fails
 						}
@@ -803,7 +816,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: expenseData.source,
 					paidById: expenseData.paidById ?? null,
 					splitAmong: expenseData.splitAmong,
-					receiptUrl,
+					receiptUrl: Array.from(receiptUrls),
 					createdAt: now,
 				};
 
@@ -817,7 +830,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						source: expense.source,
 						paid_by_id: expense.paidById,
 						split_among: expense.splitAmong,
-						receipt_url: receiptUrl,
+						receipt_url: Array.from(receiptUrls),
 					});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
@@ -891,31 +904,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!existing) return;
 
 				// Handle receipt changes
-				let receiptUrl: string | null = data.receiptUrl;
 
-				if (data.receiptFile) {
-					// New file: upload and optionally delete old
-					if (supabase) {
-						receiptUrl = await uploadReceiptFile(
-							room.id,
-							expenseId,
-							data.receiptFile,
-						);
-					} else {
-						try {
-							receiptUrl = await fileToDataUrl(data.receiptFile);
-						} catch {
-							// keep existing
-						}
-					}
-					if (existing.receiptUrl && supabase) {
-						await deleteReceiptFile(existing.receiptUrl);
-					}
-				} else if (data.receiptUrl === null && existing.receiptUrl) {
-					// Receipt explicitly cleared
-					if (supabase) await deleteReceiptFile(existing.receiptUrl);
-					receiptUrl = null;
-				}
+				//todo
 
 				const updated: Expense = {
 					...existing,
@@ -925,7 +915,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: data.source,
 					paidById: data.paidById,
 					splitAmong: data.splitAmong,
-					receiptUrl,
+					// receiptUrl:
 				};
 
 				if (supabase) {

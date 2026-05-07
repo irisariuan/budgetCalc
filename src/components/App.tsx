@@ -3,7 +3,7 @@ import { StoreProvider, useStore } from "@/lib/store";
 import { RoomSetup } from "@/components/RoomSetup";
 import { ChartsView } from "@/components/ChartsView";
 import { UserManagement } from "@/components/UserManagement";
-import { ExpenseList } from "@/components/ExpenseList";
+import { TransactionList } from "@/components/TransactionList";
 import { HotBar } from "@/components/HotBar";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -44,7 +44,7 @@ function AppInner() {
 				{/* Content */}
 				<main className="flex-1 flex flex-col gap-4 p-3">
 					<ChartsView />
-					<ExpenseList />
+					<TransactionList />
 					<UserManagement />
 				</main>
 			</div>

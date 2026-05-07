@@ -109,6 +109,7 @@ export function RealBalanceChart() {
 				source: "personal",
 				paidById: settlement.fromId,
 				splitAmong: [settlement.toId],
+				receipts: []
 			});
 		},
 		[state.members, actions],

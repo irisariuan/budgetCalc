@@ -50,7 +50,7 @@ export type DbExpense = {
 	source: "group" | "personal";
 	paid_by_id: string | null;
 	split_among: string[];
-	receipt_url: string | null;
+	receipt_url: string[];
 	created_at: string;
 };
 
@@ -177,33 +177,34 @@ export function mapExpense(row: DbExpense): Expense {
 const RECEIPTS_BUCKET = "receipts";
 
 /**
- * Uploads a receipt image to Supabase Storage.
+ * Uploads receipt images to Supabase Storage.
  * Returns the public URL, or null if offline / upload failed.
  */
 export async function uploadReceiptFile(
 	roomId: string,
 	expenseId: string,
-	file: File,
-): Promise<string | null> {
+	files: File[],
+): Promise<string[] | null> {
 	if (!supabase) return null;
+	const urls = [];
+	for (const file of files) {
+		const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+		const path = `${roomId}/${expenseId}.${ext}`;
 
-	const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-	const path = `${roomId}/${expenseId}.${ext}`;
-
-	const { error } = await supabase.storage
-		.from(RECEIPTS_BUCKET)
-		.upload(path, file, { upsert: true, contentType: file.type });
-
-	if (error) {
-		console.error("Receipt upload failed:", error.message);
-		return null;
+		const { error } = await supabase.storage
+			.from(RECEIPTS_BUCKET)
+			.upload(path, file, { upsert: true, contentType: file.type });
+		if (error) {
+			console.error("Receipt upload failed:", error.message);
+			continue;
+		}
+		const {
+			data: { publicUrl },
+		} = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(path);
+		urls.push(publicUrl);
 	}
 
-	const {
-		data: { publicUrl },
-	} = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(path);
-
-	return publicUrl;
+	return urls;
 }
 
 /**
@@ -225,12 +226,17 @@ export async function deleteReceiptFile(publicUrl: string): Promise<void> {
 	}
 }
 
-/** Converts a File to a base64 data-URL (used in offline/localStorage mode). */
-export function fileToDataUrl(file: File): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onload = () => resolve(reader.result as string);
-		reader.onerror = reject;
-		reader.readAsDataURL(file);
-	});
+/** Converts Files to a base64 data-URL (used in offline/localStorage mode). */
+export function filesToDataUrl(files: File[]): Promise<string[]> {
+	return Promise.all(
+		files.map(
+			(file) =>
+				new Promise<string>((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onload = () => resolve(reader.result as string);
+					reader.onerror = reject;
+					reader.readAsDataURL(file);
+				}),
+		),
+	);
 }

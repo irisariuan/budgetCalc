@@ -14,7 +14,7 @@ import {
 	Calendar,
 	Users,
 	User,
-	Receipt,
+	Receipt as ReceiptIcon,
 	DollarSign,
 	SplitSquareHorizontal,
 	Pencil,
@@ -50,7 +50,8 @@ import {
 	ChartTooltipContent,
 	type ChartConfig,
 } from "@/components/ui/chart";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import ReceiptEditor, { type Receipt } from "./ReceiptEditor";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -320,134 +321,6 @@ function GroupBudgetAtTimeChart({
 	);
 }
 
-// ─── Receipt Editor (inline uploader for edit form) ───────────────────────────
-
-const MAX_FILE_SIZE_MB = 5;
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-
-interface ReceiptEditorProps {
-	previewUrl: string | null;
-	file: File | null;
-	onChange: (file: File | null, previewUrl: string | null) => void;
-}
-
-function ReceiptEditor({ previewUrl, file, onChange }: ReceiptEditorProps) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [dragging, setDragging] = useState(false);
-
-	const handleFile = (f: File) => {
-		setError(null);
-		if (!ACCEPTED_TYPES.includes(f.type)) {
-			setError("Only JPEG, PNG, WebP, or HEIC images are allowed.");
-			return;
-		}
-		if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-			setError(`File must be under ${MAX_FILE_SIZE_MB} MB.`);
-			return;
-		}
-		const url = URL.createObjectURL(f);
-		onChange(f, url);
-	};
-
-	const handleRemove = () => {
-		if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-		onChange(null, null);
-		setError(null);
-	};
-
-	if (previewUrl) {
-		return (
-			<div className="relative rounded-xl overflow-hidden border border-border h-36">
-				<img
-					src={previewUrl}
-					alt="Receipt"
-					className="w-full h-full object-cover"
-				/>
-				<div className="absolute inset-0 bg-black/20" />
-				<button
-					type="button"
-					onClick={handleRemove}
-					className="absolute top-1.5 right-1.5 flex items-center justify-center size-6 rounded-full bg-background/90 text-foreground hover:bg-background transition-colors shadow"
-					aria-label="Remove receipt"
-				>
-					<X className="size-3.5" />
-				</button>
-				<div className="absolute bottom-1.5 left-2 text-xs text-white/80 font-medium truncate max-w-[80%]">
-					{file?.name ?? "Existing receipt"}
-				</div>
-				<button
-					type="button"
-					onClick={() => inputRef.current?.click()}
-					className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-background transition-colors shadow"
-				>
-					<ImagePlus className="size-3" />
-					Replace
-				</button>
-				<input
-					ref={inputRef}
-					type="file"
-					accept={ACCEPTED_TYPES.join(",")}
-					className="sr-only"
-					onChange={(e) => {
-						const f = e.target.files?.[0];
-						if (f) handleFile(f);
-						e.target.value = "";
-					}}
-				/>
-			</div>
-		);
-	}
-
-	return (
-		<div className="space-y-1.5">
-			<button
-				type="button"
-				onClick={() => inputRef.current?.click()}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setDragging(true);
-				}}
-				onDragLeave={() => setDragging(false)}
-				onDrop={(e) => {
-					e.preventDefault();
-					setDragging(false);
-					const f = e.dataTransfer?.files[0];
-					if (f) handleFile(f);
-				}}
-				className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed h-24 transition-colors text-sm ${
-					dragging
-						? "border-primary bg-primary/5 text-primary"
-						: "border-input text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
-				}`}
-			>
-				<ImagePlus className="size-5 opacity-60" />
-				<span>Click or drag to attach receipt</span>
-				<span className="text-xs opacity-60">
-					JPEG, PNG, WebP (max {MAX_FILE_SIZE_MB} MB)
-				</span>
-			</button>
-			{error && (
-				<div className="flex items-center gap-1.5 text-sm text-destructive">
-					<AlertCircle className="size-3.5 shrink-0" />
-					{error}
-				</div>
-			)}
-			<input
-				ref={inputRef}
-				type="file"
-				accept={ACCEPTED_TYPES.join(",")}
-				className="sr-only"
-				onChange={(e) => {
-					const f = e.target.files?.[0];
-					if (f) handleFile(f);
-					e.target.value = "";
-				}}
-			/>
-		</div>
-	);
-}
-
 // ─── View Content ─────────────────────────────────────────────────────────────
 
 interface ViewContentProps {
@@ -487,13 +360,16 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 			<div className="flex items-start gap-3 pt-1">
 				<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-muted overflow-hidden">
 					{expense.receiptUrl ? (
-						<img
-							src={expense.receiptUrl}
-							alt="Receipt"
-							className="h-full w-full object-cover"
-						/>
+						expense.receiptUrl.map((url) => (
+							<img
+								key={url}
+								src={url}
+								alt="Receipt"
+								className="h-full w-full object-cover"
+							/>
+						))
 					) : (
-						<Receipt className="size-5 text-muted-foreground" />
+						<ReceiptIcon className="size-5 text-muted-foreground" />
 					)}
 				</div>
 				<div className="flex flex-1 min-w-0 flex-col gap-0.5">
@@ -621,11 +497,14 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 						<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
 							Receipt Photo
 						</span>
-						<img
-							src={expense.receiptUrl}
-							alt="Receipt"
-							className="w-full max-h-56 rounded-xl border border-border object-contain bg-muted/30"
-						/>
+						{expense.receiptUrl.map((url) => (
+							<img
+								key={url}
+								src={url}
+								alt="Receipt"
+								className="h-full w-full object-cover"
+							/>
+						))}
 					</div>
 				</>
 			)}
@@ -667,10 +546,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 	const [source, setSource] = useState<ExpenseSource>(expense.source);
 	const [paidById, setPaidById] = useState(expense.paidById ?? "");
 	const [splitAmong, setSplitAmong] = useState<string[]>(expense.splitAmong);
-	const [receiptFile, setReceiptFile] = useState<File | null>(null);
-	const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(
-		expense.receiptUrl,
-	);
+	const [receipts, setReceipts] = useState<Receipt[]>([]);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState(false);
 
@@ -682,8 +558,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 		setSource(expense.source);
 		setPaidById(expense.paidById ?? "");
 		setSplitAmong(expense.splitAmong);
-		setReceiptFile(null);
-		setReceiptPreviewUrl(expense.receiptUrl);
+		setReceipts(expense.receiptUrl.map((v) => ({ url: v })));
 		setErrors({});
 	}, [expense.id]);
 
@@ -731,8 +606,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 				source,
 				paidById: source === "personal" ? paidById : null,
 				splitAmong: source === "personal" ? splitAmong : [],
-				receiptFile,
-				receiptUrl: receiptPreviewUrl,
+				receipts,
 			});
 			toast.success("Expense updated");
 			onSaved();
@@ -949,14 +823,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 						(optional)
 					</span>
 				</Label>
-				<ReceiptEditor
-					previewUrl={receiptPreviewUrl}
-					file={receiptFile}
-					onChange={(f, url) => {
-						setReceiptFile(f);
-						setReceiptPreviewUrl(url);
-					}}
-				/>
+				<ReceiptEditor receipts={receipts} onChange={setReceipts} />
 			</div>
 
 			{/* Actions */}
@@ -996,7 +863,6 @@ export function ExpenseDetailPanel({
 	open,
 	onOpenChange,
 }: ExpenseDetailPanelProps) {
-	const isDesktop = useMediaQuery("(min-width: 768px)");
 	const [isEditing, setIsEditing] = useState(false);
 
 	// Reset edit mode when panel closes or a different expense is opened

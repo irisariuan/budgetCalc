@@ -6,7 +6,7 @@ import {
 	X,
 	Users,
 	SlidersHorizontal,
-    User,
+	User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
 	CardHeader,
 	CardTitle,
 	CardAction,
+	CardFooter,
 } from "@/components/ui/card";
 import { useStore } from "@/lib/store";
 import { calculateCurrentBalances } from "@/lib/chartUtils";
@@ -28,6 +29,9 @@ import {
 	type BalanceAdjustment,
 } from "@/lib/types";
 import { useState, useEffect, useMemo, type SubmitEvent } from "react";
+import { usePagination, Paginator } from "./Paginator";
+
+const PAGE_SIZE = 8;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -335,6 +339,22 @@ export function UserManagement() {
 		await actions.addMember(name, color);
 	};
 
+	const {
+		page,
+		setPage,
+		totalPages,
+		totalItems,
+		paged: pagedMembers,
+		pageSize,
+	} = usePagination(members as Member[], PAGE_SIZE);
+
+	const handlePageChange = (newPage: number) => {
+		setEditingId(null);
+		setDeletingId(null);
+		setAdjustingId(null);
+		setPage(newPage);
+	};
+
 	const currentBalances = useMemo(
 		() =>
 			calculateCurrentBalances(
@@ -373,7 +393,7 @@ export function UserManagement() {
 					</div>
 				) : (
 					<ul className="space-y-1">
-						{(members as Member[]).map((member: Member) => (
+						{(pagedMembers as Member[]).map((member: Member) => (
 							<li key={member.id} className="space-y-1">
 								{/* ── Normal row ── */}
 								{editingId !== member.id &&
@@ -491,6 +511,18 @@ export function UserManagement() {
 					usedColors={usedColors}
 				/>
 			</CardContent>
+
+			{totalPages > 1 && (
+				<CardFooter>
+					<Paginator
+						page={page}
+						totalPages={totalPages}
+						totalItems={totalItems}
+						pageSize={pageSize}
+						onPageChange={handlePageChange}
+					/>
+				</CardFooter>
+			)}
 		</Card>
 	);
 }

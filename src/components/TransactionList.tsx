@@ -12,11 +12,20 @@ import {
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import type { Expense, BalanceAdjustment, Member } from "@/lib/types";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+	Card,
+	CardHeader,
+	CardTitle,
+	CardContent,
+	CardFooter,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExpenseDetailPanel } from "@/components/ExpenseDetailPanel";
 import { AdjustmentDetailPanel } from "@/components/AdjustmentDetailPanel";
 import { useEffect, useState, useMemo } from "react";
+import { usePagination, Paginator } from "./Paginator";
+
+const PAGE_SIZE = 10;
 
 // ─── Unified transaction item ─────────────────────────────────────────────────
 
@@ -160,9 +169,9 @@ function ExpenseRow({ expense, members, currency, onClick }: ExpenseRowProps) {
 			aria-label={`View details for ${expense.description}`}
 		>
 			{/* Receipt thumbnail or icon */}
-			{expense.receiptUrl ? (
+			{expense.receiptUrl ? expense.receiptUrl.map(url =>
 				<ReceiptThumb
-					url={expense.receiptUrl}
+					url={url}
 					description={expense.description}
 				/>
 			) : (
@@ -286,9 +295,11 @@ function AdjustmentRow({
 			{/* Main content */}
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<div className="flex items-center gap-2 min-w-0">
-					{adjustment.description && <span className="truncate text-sm font-medium leading-snug">
-						{adjustment.description}
-					</span>}
+					{adjustment.description && (
+						<span className="truncate text-sm font-medium leading-snug">
+							{adjustment.description}
+						</span>
+					)}
 					<Badge
 						variant="outline"
 						className="shrink-0 text-xs px-1.5 py-0 h-4 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400"
@@ -404,6 +415,15 @@ export function TransactionList() {
 		);
 	}, [expenses, balanceAdjustments]);
 
+	const {
+		page,
+		setPage,
+		totalPages,
+		totalItems,
+		paged: pagedSorted,
+		pageSize,
+	} = usePagination(sorted, PAGE_SIZE);
+
 	// ── Summary stats ─────────────────────────────────────────────────────────
 	const fmt = new Intl.NumberFormat("en-US", {
 		style: "currency",
@@ -494,7 +514,7 @@ export function TransactionList() {
 						</div>
 					) : (
 						<div className="divide-y divide-border">
-							{sorted.map((item) =>
+							{pagedSorted.map((item) =>
 								item.kind === "expense" ? (
 									<ExpenseRow
 										key={`expense-${item.data.id}`}
@@ -520,6 +540,18 @@ export function TransactionList() {
 						</div>
 					)}
 				</CardContent>
+
+				{totalPages > 1 && (
+					<CardFooter>
+						<Paginator
+							page={page}
+							totalPages={totalPages}
+							totalItems={totalItems}
+							pageSize={pageSize}
+							onPageChange={setPage}
+						/>
+					</CardFooter>
+				)}
 			</Card>
 
 			{/* Expense detail panel */}
@@ -538,6 +570,3 @@ export function TransactionList() {
 		</>
 	);
 }
-
-// Back-compat alias so App.tsx import still resolves without changes
-export { TransactionList as ExpenseList };
