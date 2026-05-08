@@ -162,6 +162,14 @@ export function LoginScreen() {
 					</>
 				)}
 			</div>
+			<div className="fixed bottom-0 left-0 right-0 pb-4">
+				<p className="text-center text-xs text-muted-foreground mt-2 px-4">
+					This website does not promise safety or security of your
+					data nor guarantee consistency of your data. By using this
+					website, you agree that you take full responsibility for any
+					risks.
+				</p>
+			</div>
 		</div>
 	);
 }
