@@ -8,9 +8,16 @@ import {
 	SlidersHorizontal,
 	TrendingUp,
 	TrendingDown,
+	BadgeDollarSign,
+	BanknoteArrowUp,
 } from "lucide-react";
 import { useStore } from "@/lib/store";
-import type { Expense, BalanceAdjustment, Member } from "@/lib/types";
+import type {
+	Expense,
+	BalanceAdjustment,
+	Member,
+	BudgetAdjustment,
+} from "@/lib/types";
 import {
 	Card,
 	CardHeader,
@@ -24,6 +31,8 @@ import { AdjustmentDetailPanel } from "@/components/AdjustmentDetailPanel";
 import { PhotoCarouselLightbox } from "@/components/PhotoCarousel";
 import { useEffect, useState, useMemo } from "react";
 import { usePagination, Paginator } from "./Paginator";
+import { formatDateShort } from "@/lib/dateFormat";
+import { BudgetAdjustmentDetailPanel } from "./BudgetAdjustmentDetailPanel";
 
 const PAGE_SIZE = 10;
 
@@ -31,7 +40,8 @@ const PAGE_SIZE = 10;
 
 type TransactionItem =
 	| { kind: "expense"; data: Expense }
-	| { kind: "adjustment"; data: BalanceAdjustment };
+	| { kind: "adjustment"; data: BalanceAdjustment }
+	| { kind: "budgetAddition"; data: Omit<BalanceAdjustment, "memberId"> };
 
 function txDate(item: TransactionItem): string {
 	return item.kind === "expense" ? item.data.date : item.data.date;
@@ -113,10 +123,7 @@ function ExpenseRow({ expense, members, currency, onClick }: ExpenseRowProps) {
 		maximumFractionDigits: 2,
 	});
 
-	const dateLabel = new Date(`${expense.date}T00:00:00Z`).toLocaleDateString(
-		"en-US",
-		{ month: "short", day: "numeric", timeZone: "UTC" },
-	);
+	const dateLabel = formatDateShort(expense.date);
 
 	return (
 		<button
@@ -225,13 +232,7 @@ function AdjustmentRow({
 		maximumFractionDigits: 2,
 	});
 
-	const dateLabel = new Date(
-		`${adjustment.date}T00:00:00Z`,
-	).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
+	const dateLabel = formatDateShort(adjustment.date);
 
 	return (
 		<button
@@ -316,11 +317,102 @@ function AdjustmentRow({
 	);
 }
 
+interface BudgetAdjustmentRowProps {
+	adjustment: BudgetAdjustment;
+	currency: string;
+	onClick: () => void;
+}
+
+function BudgetAdjustmentRow({
+	adjustment,
+	currency,
+	onClick,
+}: BudgetAdjustmentRowProps) {
+	const isCredit = adjustment.amount >= 0;
+
+	const fmt = new Intl.NumberFormat("en-US", {
+		style: "currency",
+		currency,
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	});
+
+	const dateLabel = formatDateShort(adjustment.date);
+
+	return (
+		<button
+			type="button"
+			className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 active:bg-muted/60 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+			onClick={onClick}
+			aria-label={`View adjustment: ${adjustment.description}`}
+		>
+			{/* Member avatar */}
+			<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white bg-amber-500">
+				<BadgeDollarSign />
+			</div>
+
+			{/* Main content */}
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<div className="flex items-center gap-2 min-w-0">
+					{adjustment.description && (
+						<span className="truncate text-sm font-medium leading-snug">
+							{adjustment.description}
+						</span>
+					)}
+					<Badge
+						variant="outline"
+						className="shrink-0 text-xs px-1.5 py-0 h-4 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400"
+					>
+						<BanknoteArrowUp className="size-2.5 mr-0.5" />
+						Budget
+					</Badge>
+				</div>
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+					<span>{dateLabel}</span>
+					<>
+						<span
+							className={
+								isCredit
+									? "text-emerald-600 dark:text-emerald-400"
+									: "text-red-600 dark:text-red-400"
+							}
+						>
+							{isCredit ? "credit" : "debit"}
+						</span>
+					</>
+				</div>
+			</div>
+
+			{/* Signed amount + icon + chevron */}
+			<div className="flex shrink-0 flex-col items-end gap-1">
+				<div className="flex items-center gap-1">
+					{isCredit ? (
+						<TrendingUp className="size-3 text-emerald-500" />
+					) : (
+						<TrendingDown className="size-3 text-red-500" />
+					)}
+					<span
+						className={`font-mono text-sm font-semibold tabular-nums ${
+							isCredit
+								? "text-emerald-600 dark:text-emerald-400"
+								: "text-red-600 dark:text-red-400"
+						}`}
+					>
+						{isCredit ? "+" : ""}
+						{fmt.format(adjustment.amount)}
+					</span>
+				</div>
+				<ChevronRight className="size-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+			</div>
+		</button>
+	);
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function TransactionList() {
 	const { state } = useStore();
-	const { expenses, members, balanceAdjustments } = state;
+	const { expenses, members, balanceAdjustments, budgetAdditions } = state;
 	const currency = state.room?.currency ?? "USD";
 
 	// ── Detail panel state ────────────────────────────────────────────────────
@@ -333,6 +425,10 @@ export function TransactionList() {
 		string | null
 	>(null);
 	const [adjustmentDetailOpen, setAdjustmentDetailOpen] = useState(false);
+	const [selectedBudgetAdjustmentId, setSelectedBudgetAdjustmentId] =
+		useState<string | null>(null);
+	const [budgetAdjustmentDetailOpen, setBudgetAdjustmentDetailOpen] =
+		useState(false);
 
 	const handleExpenseClick = (expense: Expense) => {
 		setSelectedExpenseId(expense.id);
@@ -351,6 +447,14 @@ export function TransactionList() {
 		setAdjustmentDetailOpen(open);
 		if (!open) setTimeout(() => setSelectedAdjustmentId(null), 300);
 	};
+	const handleBudgetAdjustmentClick = (adjustment: BudgetAdjustment) => {
+		setSelectedBudgetAdjustmentId(adjustment.id);
+		setBudgetAdjustmentDetailOpen(true);
+	};
+	const handleBudgetAdjustmentDetailOpenChange = (open: boolean) => {
+		setBudgetAdjustmentDetailOpen(open);
+		if (!open) setTimeout(() => setSelectedBudgetAdjustmentId(null), 300);
+	};
 
 	// ── Build unified sorted list ─────────────────────────────────────────────
 	const sorted = useMemo<TransactionItem[]>(() => {
@@ -364,13 +468,26 @@ export function TransactionList() {
 					data: a,
 				}),
 			),
+			...budgetAdditions.map(
+				(a): TransactionItem => ({
+					kind: "budgetAddition",
+					data: {
+						id: a.id,
+						roomId: a.roomId,
+						description: a.description,
+						amount: a.amount,
+						date: a.date,
+						createdAt: a.createdAt,
+					},
+				}),
+			),
 		];
 		return items.sort(
 			(a, b) =>
 				txDate(b).localeCompare(txDate(a)) ||
 				txCreatedAt(b).localeCompare(txCreatedAt(a)),
 		);
-	}, [expenses, balanceAdjustments]);
+	}, [expenses, balanceAdjustments, budgetAdditions]);
 
 	const {
 		page,
@@ -482,7 +599,7 @@ export function TransactionList() {
 											handleExpenseClick(item.data)
 										}
 									/>
-								) : (
+								) : item.kind === "adjustment" ? (
 									<AdjustmentRow
 										key={`adjustment-${item.data.id}`}
 										adjustment={item.data}
@@ -490,6 +607,17 @@ export function TransactionList() {
 										currency={currency}
 										onClick={() =>
 											handleAdjustmentClick(item.data)
+										}
+									/>
+								) : (
+									<BudgetAdjustmentRow
+										key={`budgetAddition-${item.data.id}`}
+										adjustment={item.data}
+										currency={currency}
+										onClick={() =>
+											handleBudgetAdjustmentClick(
+												item.data,
+											)
 										}
 									/>
 								),
@@ -523,6 +651,11 @@ export function TransactionList() {
 				adjustmentId={selectedAdjustmentId}
 				open={adjustmentDetailOpen}
 				onOpenChange={handleAdjustmentDetailOpenChange}
+			/>
+			<BudgetAdjustmentDetailPanel
+				budgetId={selectedBudgetAdjustmentId}
+				open={budgetAdjustmentDetailOpen}
+				onOpenChange={handleBudgetAdjustmentDetailOpenChange}
 			/>
 		</>
 	);

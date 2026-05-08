@@ -56,7 +56,7 @@ export interface Expense {
 	createdAt: string;
 }
 
-export interface BudgetAddition {
+export interface BudgetAdjustment {
 	id: string;
 	roomId: string;
 	description: string;
@@ -103,7 +103,7 @@ export interface AppState {
 	members: Member[];
 	roomParticipants: RoomParticipant[];
 	expenses: Expense[];
-	budgetAdditions: BudgetAddition[];
+	budgetAdditions: BudgetAdjustment[];
 	balanceAdjustments: BalanceAdjustment[];
 	error: string | null;
 	user: AuthUser | null;
@@ -131,9 +131,10 @@ export type AppAction =
 	| { type: "ADD_EXPENSE"; payload: Expense }
 	| { type: "REMOVE_EXPENSE"; payload: string }
 	| { type: "UPDATE_EXPENSE"; payload: Expense }
-	| { type: "SET_BUDGET_ADDITIONS"; payload: BudgetAddition[] }
-	| { type: "ADD_BUDGET_ADDITION"; payload: BudgetAddition }
+	| { type: "SET_BUDGET_ADDITIONS"; payload: BudgetAdjustment[] }
+	| { type: "ADD_BUDGET_ADDITION"; payload: BudgetAdjustment }
 	| { type: "REMOVE_BUDGET_ADDITION"; payload: string }
+	| { type: "UPDATE_BUDGET_ADDITION"; payload: BudgetAdjustment }
 	| { type: "SET_BALANCE_ADJUSTMENTS"; payload: BalanceAdjustment[] }
 	| { type: "ADD_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment }
 	| { type: "REMOVE_BALANCE_ADJUSTMENT"; payload: string }

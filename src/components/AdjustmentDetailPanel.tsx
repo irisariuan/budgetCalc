@@ -44,6 +44,7 @@ import {
 	type ChartConfig,
 } from "@/components/ui/chart";
 import { useEffect, useMemo, useState } from "react";
+import { formatDateLong, formatDateShort } from "@/lib/dateFormat";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -66,21 +67,11 @@ function fmtCurrencyShort(value: number, currency: string): string {
 }
 
 function fmtDate(dateStr: string): string {
-	return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString("en-US", {
-		weekday: "short",
-		year: "numeric",
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
+	return formatDateLong(dateStr);
 }
 
 function fmtDateShort(dateStr: string): string {
-	return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
+	return formatDateShort(dateStr);
 }
 
 // ─── Member Balance Chart ─────────────────────────────────────────────────────

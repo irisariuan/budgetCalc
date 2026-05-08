@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import type {
 	Room,
 	Member,
-	BudgetAddition,
+	BudgetAdjustment,
 	BalanceAdjustment,
 	Expense,
 	AuthUser,
@@ -207,7 +207,7 @@ export function mapMember(row: DbMember): Member {
 	};
 }
 
-export function mapBudgetAddition(row: DbBudgetAddition): BudgetAddition {
+export function mapBudgetAddition(row: DbBudgetAddition): BudgetAdjustment {
 	return {
 		id: row.id,
 		roomId: row.room_id,
