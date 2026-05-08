@@ -774,11 +774,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				// ── Handle receipt file ─────────────────────────────────────────
 				let receiptUrls: string[] = [];
 				if (supabase && expenseData.receipts.length > 0) {
-					// Upload new files to Supabase Storage
-					const filesToUpload = expenseData.receipts
-						.map((r) => r.file)
-						.filter((f): f is File => !!f);
+					// Separate existing URLs from new files
+					const existingUrls: string[] = [];
+					const filesToUpload: File[] = [];
 
+					for (const receipt of expenseData.receipts) {
+						if (receipt.file) {
+							// New file to upload
+							filesToUpload.push(receipt.file);
+						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
+							// Existing URL from database (when copying)
+							existingUrls.push(receipt.url);
+						}
+					}
+
+					// Start with existing URLs
+					receiptUrls = [...existingUrls];
+
+					// Upload new files
 					if (filesToUpload.length > 0) {
 						const uploadedUrls = await uploadReceiptFile(
 							room.id,
@@ -786,7 +799,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							filesToUpload,
 						);
 						if (uploadedUrls) {
-							receiptUrls = uploadedUrls;
+							receiptUrls = [...receiptUrls, ...uploadedUrls];
 						}
 					}
 				}
