@@ -119,7 +119,12 @@ interface StoreActions {
 		},
 	) => Promise<void>;
 	restoreBalanceAdjustment: (adjustment: BalanceAdjustment) => Promise<void>;
-	updateRoom: (data: { name?: string; listed?: boolean }) => Promise<void>;
+	updateRoom: (data: {
+		name?: string;
+		listed?: boolean;
+		inviteOnly?: boolean;
+		inviteCode?: string;
+	}) => Promise<void>;
 }
 
 interface StoreContextValue {
@@ -138,6 +143,15 @@ function generateRoomId(): string {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	return Array.from(
 		{ length: 6 },
+		() => chars[Math.floor(Math.random() * chars.length)],
+	).join("");
+}
+
+/** Generates an 8-character uppercase alphanumeric invite code. */
+function generateInviteCode(): string {
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	return Array.from(
+		{ length: 8 },
 		() => chars[Math.floor(Math.random() * chars.length)],
 	).join("");
 }
@@ -171,6 +185,9 @@ function saveRoomToLocalStorage(
 	writeLocalData(data);
 }
 
+/**
+ * Pushes the current room ID to the URL as a query parameter without reloading the page,
+ */
 function pushRoomToUrl(roomId: string): void {
 	const url = new URL(window.location.href);
 	url.searchParams.set("room", roomId);
@@ -708,14 +725,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					currency,
 					createdAt: now,
 					listed: true,
+					inviteOnly: false,
+					inviteCode: "",
 				};
 
 				if (supabase) {
 					dispatch({ type: "SET_STATUS", payload: "loading" });
 
-					const { error } = await supabase
-						.from("rooms")
-						.insert({ id, name, currency, listed: true });
+					const { error } = await supabase.from("rooms").insert({
+						id,
+						name,
+						currency,
+						listed: true,
+						invite_only: false,
+						invite_code: generateInviteCode(),
+					});
 
 					if (error) {
 						dispatch({ type: "SET_ERROR", payload: error.message });
@@ -749,8 +773,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					dispatch({ type: "SET_STATUS", payload: "offline" });
 
 					const data = readLocalData();
+					// For offline mode, generate a local invite code.
+					const inviteCode = generateInviteCode();
 					data[id] = {
-						room,
+						room: { ...room, inviteCode },
 						members: [],
 						expenses: [],
 						budgetAdditions: [],
@@ -764,26 +790,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 			},
 
 			// ── joinRoom ─────────────────────────────────────────────────────────
-			joinRoom: async (roomId) => {
+			joinRoom: async (code) => {
 				if (supabase) {
+					// Try joining by room ID first (6-char code), then by invite code (8-char).
 					// join_room RPC runs SECURITY DEFINER so it can verify the room
 					// exists and add the caller to room_members even if RLS would
 					// otherwise block direct SELECT on the rooms table.
-					const { data: result, error: rpcError } =
-						await supabase.rpc("join_room", { p_room_id: roomId });
-					if (rpcError || !result?.found) return false;
+					let resolvedRoomId: string | null = null;
+
+					if (code.length === 6) {
+						// Treat as room ID
+						const { data: result, error: rpcError } =
+							await supabase.rpc("join_room", {
+								p_room_id: code,
+							});
+						if (!rpcError && result?.found) {
+							resolvedRoomId = code;
+						}
+					}
+
+					// If room ID didn't work, try invite code
+					if (!resolvedRoomId) {
+						const { data: result, error: rpcError } =
+							await supabase.rpc("join_room", {
+								p_invite_code: code,
+							});
+						if (!rpcError && result?.found) {
+							// The RPC returns the room_id when joining by invite code
+							resolvedRoomId = code; // We'll load via subscribe
+						}
+					}
+
+					if (!resolvedRoomId) return false;
 
 					// Now that we're a member, load the full room data.
-					const found = await loadRoomFromSupabase(roomId);
+					// If we joined by invite code, we need to find the room_id first.
+					let roomIdToLoad = resolvedRoomId;
+					if (code.length === 8) {
+						// Joined by invite code — fetch room_id from the room
+						const { data: rooms } = await supabase
+							.from("rooms")
+							.select("id")
+							.eq("invite_code", code)
+							.single();
+						if (rooms) roomIdToLoad = rooms.id;
+					}
+
+					const found = await loadRoomFromSupabase(roomIdToLoad);
 					if (!found) return false;
-					subscribeToRoom(roomId);
-					pushRoomToUrl(roomId);
+					subscribeToRoom(roomIdToLoad);
+					pushRoomToUrl(roomIdToLoad);
 					return true;
 				}
 
 				// localStorage path
 				const data = readLocalData();
-				const roomData = data[roomId];
+				const roomData = data[code];
 				if (!roomData) return false;
 
 				dispatch({ type: "SET_ROOM", payload: roomData.room });
@@ -798,7 +860,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					payload: roomData.balanceAdjustments ?? [],
 				});
 				dispatch({ type: "SET_STATUS", payload: "offline" });
-				pushRoomToUrl(roomId);
+				pushRoomToUrl(code);
 				return true;
 			},
 
@@ -1399,6 +1461,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						{};
 					if (data.name !== undefined) patch.name = data.name;
 					if (data.listed !== undefined) patch.listed = data.listed;
+					if (data.inviteOnly !== undefined)
+						patch.invite_only = data.inviteOnly;
+					if (
+						data.inviteCode !== undefined &&
+						data.inviteCode !== room.inviteCode
+					) {
+						// Regenerate invite code on the server
+						patch.invite_code = data.inviteCode;
+					}
 					const { error } = await supabase
 						.from("rooms")
 						.update(patch)

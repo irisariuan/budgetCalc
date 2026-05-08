@@ -108,7 +108,6 @@ export function LoginScreen() {
 					)}
 					Continue with Google
 				</Button>
-
 				{/* GitHub */}
 				<Button
 					size="lg"
@@ -124,35 +123,40 @@ export function LoginScreen() {
 					)}
 					Continue with GitHub
 				</Button>
-
-				{/* Divider */}
-				<div className="flex items-center gap-3 my-1">
-					<div className="h-px flex-1 bg-border" />
-					<span className="text-xs text-muted-foreground">or</span>
-					<div className="h-px flex-1 bg-border" />
-				</div>
-
-				{/* Anonymous */}
-				<Button
-					size="lg"
-					variant="ghost"
-					className="w-full text-muted-foreground"
-					onClick={handleAnon}
-					disabled={busy || !captchaToken}
-				>
-					{loading === "anon" && (
-						<Loader2 className="size-4 animate-spin" />
-					)}
-					Continue as Guest
-				</Button>
-				<Turnstile
-					sitekey={turnstileKey}
-					onSuccess={(token) => setCaptchaToken(token)}
-				/>
-				<p className="text-center text-xs text-muted-foreground mt-2 px-4">
-					Guest sessions are anonymous and stored on this device. Sign
-					in with a provider to access your rooms from anywhere.
-				</p>
+				{turnstileKey && (
+					<>
+						{/* Divider */}
+						<div className="flex items-center gap-3 my-1">
+							<div className="h-px flex-1 bg-border" />
+							<span className="text-xs text-muted-foreground">
+								or
+							</span>
+							<div className="h-px flex-1 bg-border" />
+						</div>
+						{/* Anonymous */}
+						<Button
+							size="lg"
+							variant="ghost"
+							className="w-full text-muted-foreground"
+							onClick={handleAnon}
+							disabled={busy || !captchaToken}
+						>
+							{loading === "anon" && (
+								<Loader2 className="size-4 animate-spin" />
+							)}
+							Continue as Guest
+						</Button>
+						<Turnstile
+							sitekey={turnstileKey}
+							onSuccess={(token) => setCaptchaToken(token)}
+						/>
+						<p className="text-center text-xs text-muted-foreground mt-2 px-4">
+							Guest sessions are anonymous and stored on this
+							device. Sign in with a provider to access your rooms
+							from anywhere.
+						</p>
+					</>
+				)}
 			</div>
 		</div>
 	);

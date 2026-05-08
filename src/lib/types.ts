@@ -20,6 +20,10 @@ export interface Room {
 	createdAt: string;
 	/** Whether this room is shown in the public room list on the join screen. */
 	listed: boolean;
+	/** If true, only users with an invite link or admin invitation can join. */
+	inviteOnly: boolean;
+	/** Unique 8-character alphanumeric code for joining via invite link. */
+	inviteCode: string;
 }
 
 export interface Member {

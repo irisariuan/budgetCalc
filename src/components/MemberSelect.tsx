@@ -20,6 +20,13 @@ export function MemberSelect({
 	onValueChange,
 	placeholder = "Select member…",
 }: MemberSelectProps) {
+	if (members.length === 0) {
+		return (
+			<div className="text-sm text-muted-foreground">
+				No members found
+			</div>
+		);
+	}
 	return (
 		<Select value={value} onValueChange={onValueChange}>
 			<SelectTrigger className="w-full">

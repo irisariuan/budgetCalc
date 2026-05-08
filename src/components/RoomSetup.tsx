@@ -84,29 +84,76 @@ export function RoomSetup() {
 	const [joinError, setJoinError] = useState<string | null>(null);
 	const [isJoining, setIsJoining] = useState(false);
 
-	const [rooms, setRooms] = useState<Room[] | null>(null);
+	const [rooms, setRooms] = useState<{
+		items: Room[];
+		joinedIds: Set<string>;
+	} | null>(null);
 
 	useEffect(() => {
 		if (!supabase) return;
 		(async () => {
-			const { data, error } = await supabase
+			if (!state.user) return;
+			const userId = state.user.id;
+			// ── 1. Fetch room IDs the user has joined ─────────────────────
+			const { data: joinedData } = await supabase
+				.from("room_members")
+				.select("room_id")
+				.eq("user_id", userId);
+			const joinedRoomIds = new Set(
+				joinedData?.map((r) => r.room_id) ?? [],
+			);
+
+			// ── 2. Fetch joined rooms (RLS allows via member policy) ──────
+			const { data: myRooms } = joinedRoomIds.size
+				? await supabase
+						.from("rooms")
+						.select("*")
+						.in("id", Array.from(joinedRoomIds))
+						.order("created_at", { ascending: false })
+				: { data: [] };
+
+			// ── 3. Fetch public rooms (RLS allows via listed policy) ─────
+			const { data: publicRooms } = await supabase
 				.from("rooms")
 				.select("*")
-				.eq("listed", true);
-			if (error) {
-				return setRooms([]);
+				.eq("listed", true)
+				.order("created_at", { ascending: false });
+
+			// ── 4. Merge & deduplicate ───────────────────────────────────
+			const merged = new Map<string, Room>();
+			// Joined rooms first
+			for (const r of myRooms ?? []) {
+				merged.set(r.id, {
+					createdAt: r.created_at,
+					currency: r.currency,
+					id: r.id,
+					name: r.name,
+					listed: r.listed ?? true,
+					inviteOnly: r.invite_only ?? false,
+					inviteCode: r.invite_code ?? "",
+				});
 			}
-			setRooms(
-				data.map((v) => ({
-					createdAt: v.created_at,
-					currency: v.currency,
-					id: v.id,
-					name: v.name,
-					listed: v.listed ?? true,
-				})),
-			);
+			// Then public rooms (skip if already joined)
+			for (const r of publicRooms ?? []) {
+				if (!merged.has(r.id)) {
+					merged.set(r.id, {
+						createdAt: r.created_at,
+						currency: r.currency,
+						id: r.id,
+						name: r.name,
+						listed: r.listed ?? true,
+						inviteOnly: r.invite_only ?? false,
+						inviteCode: r.invite_code ?? "",
+					});
+				}
+			}
+
+			setRooms({
+				items: Array.from(merged.values()),
+				joinedIds: joinedRoomIds,
+			});
 		})();
-	}, [supabase]);
+	}, [supabase, state.user]);
 
 	async function joinRoomById(roomId: string) {
 		setJoinError(null);
@@ -334,9 +381,9 @@ export function RoomSetup() {
 							Rooms available to join are shown below
 						</CardDescription>
 						{rooms ? (
-							rooms.length > 0 ? (
+							rooms.items.length > 0 ? (
 								<ul className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-									{rooms.map((room) => (
+									{rooms.items.map((room) => (
 										<li
 											key={room.id}
 											className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-accent cursor-pointer"
@@ -344,7 +391,16 @@ export function RoomSetup() {
 												joinRoomById(room.id);
 											}}
 										>
-											<span>{room.name}</span>
+											<span className="truncate">
+												{room.name}
+												{rooms.joinedIds.has(
+													room.id,
+												) && (
+													<span className="ml-2 inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+														Joined
+													</span>
+												)}
+											</span>
 											<span className="text-muted-foreground">
 												{room.currency}
 											</span>
@@ -357,7 +413,7 @@ export function RoomSetup() {
 									No rooms available.
 								</div>
 							)
-						) : supabase ? (
+						) : supabase && state.user ? (
 							<div className="flex items-center gap-2 mt-2 text-muted-foreground">
 								<Loader2 className="size-4 animate-spin" />
 								Loading rooms…

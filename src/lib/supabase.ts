@@ -23,6 +23,10 @@ export type DbRoom = {
 	created_at: string;
 	/** Defaults to true; false hides the room from the public list. */
 	listed: boolean;
+	/** If true, only users with an invite link or admin invitation can join. */
+	invite_only: boolean;
+	/** Unique 8-char alphanumeric code for joining via invite link. */
+	invite_code: string;
 };
 
 export type DbMember = {
@@ -120,7 +124,7 @@ export type Database = {
 		Views: Record<string, never>;
 		Functions: {
 			join_room: {
-				Args: { p_room_id: string };
+				Args: { p_room_id?: string; p_invite_code?: string };
 				Returns: { found: boolean };
 			};
 		};
@@ -156,6 +160,8 @@ export function mapRoom(row: DbRoom): Room {
 		createdAt: row.created_at,
 		// Default true so existing rows without the column stay visible.
 		listed: row.listed ?? true,
+		inviteOnly: row.invite_only ?? false,
+		inviteCode: row.invite_code ?? "",
 	};
 }
 

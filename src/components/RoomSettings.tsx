@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Save, Eye, EyeOff } from "lucide-react";
+import { Save, Eye, EyeOff, Users, Copy, RefreshCw, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { useStore } from "@/lib/store";
+import { InvitePanel } from "@/components/InvitePanel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -20,19 +21,52 @@ export function RoomSettings() {
 
 	const [name, setName] = useState(room?.name ?? "");
 	const [listed, setListed] = useState(room?.listed ?? true);
+	const [inviteOnly, setInviteOnly] = useState(room?.inviteOnly ?? false);
+	const [inviteCode, setInviteCode] = useState(room?.inviteCode ?? "");
 	const [saving, setSaving] = useState(false);
+	const [inviteOpen, setInviteOpen] = useState(false);
+	const [copied, setCopied] = useState(false);
 
 	if (!room) return null;
 
 	const isDirty =
-		name.trim() !== room.name || listed !== (room.listed ?? true);
+		name.trim() !== room.name ||
+		listed !== (room.listed ?? true) ||
+		inviteOnly !== (room.inviteOnly ?? false) ||
+		inviteCode !== (room.inviteCode ?? "");
 
 	const handleSave = async () => {
 		const trimmed = name.trim();
 		if (!trimmed || saving) return;
 		setSaving(true);
-		await actions.updateRoom({ name: trimmed, listed });
+		await actions.updateRoom({ name: trimmed, listed, inviteOnly });
 		toast("Settings saved");
+		setSaving(false);
+	};
+
+	const handleCopyCode = async () => {
+		try {
+			await navigator.clipboard.writeText(inviteCode);
+			setCopied(true);
+			toast("Invite code copied");
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			toast("Failed to copy");
+		}
+	};
+
+	const handleRegenerate = async () => {
+		if (saving) return;
+		setSaving(true);
+		// Generate a random 8-char alphanumeric code
+		const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+		let newCode = "";
+		for (let i = 0; i < 8; i++) {
+			newCode += chars[Math.floor(Math.random() * chars.length)];
+		}
+		setInviteCode(newCode);
+		await actions.updateRoom({ inviteCode: newCode });
+		toast("Invite code regenerated");
 		setSaving(false);
 	};
 
@@ -120,6 +154,121 @@ export function RoomSettings() {
 				</CardContent>
 			</Card>
 
+			{/* ── Invite Only ──────────────────────────────────────────────── */}
+			<Card>
+				<CardHeader>
+					<CardTitle>Invite Only</CardTitle>
+					<CardDescription>
+						When enabled, only users with an invite link can join
+						this room.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<button
+						type="button"
+						onClick={() => setInviteOnly((v) => !v)}
+						className={cn(
+							"flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors",
+							inviteOnly
+								? "border-primary/40 bg-primary/5"
+								: "border-border bg-muted/30",
+						)}
+					>
+						<div className="flex items-center gap-3">
+							{inviteOnly ? (
+								<Users className="size-5 shrink-0 text-primary" />
+							) : (
+								<Users className="size-5 shrink-0 text-muted-foreground" />
+							)}
+							<div>
+								<p className="font-medium leading-none">
+									Invite only
+								</p>
+								<p className="mt-1 text-sm text-muted-foreground">
+									{inviteOnly
+										? "Only people with an invite link can join"
+										: "Anyone can join with the room code"}
+								</p>
+							</div>
+						</div>
+
+						{/* Toggle pill */}
+						<div
+							aria-hidden
+							className={cn(
+								"relative ml-4 h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+								inviteOnly
+									? "bg-primary"
+									: "bg-muted-foreground/30",
+							)}
+						>
+							<span
+								className={cn(
+									"absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200",
+									inviteOnly
+										? "translate-x-5"
+										: "translate-x-0",
+								)}
+							/>
+						</div>
+					</button>
+				</CardContent>
+			</Card>
+
+			{/* ── Invite Code ──────────────────────────────────────────────── */}
+			<Card>
+				<CardHeader>
+					<CardTitle>Invite Code</CardTitle>
+					<CardDescription>
+						Share this code so others can join your room via link.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<div className="flex items-center gap-2">
+						<div className="flex-1 rounded-lg border border-border bg-muted/50 px-4 py-3 font-mono text-center text-lg tracking-widest">
+							{inviteCode || "—"}
+						</div>
+						<Button
+							size="icon"
+							variant="outline"
+							onClick={handleCopyCode}
+							title="Copy code"
+						>
+							{copied ? (
+								<Check className="size-4 text-green-500" />
+							) : (
+								<Copy className="size-4" />
+							)}
+						</Button>
+						<Button
+							size="icon"
+							variant="outline"
+							onClick={handleRegenerate}
+							disabled={saving}
+							title="Regenerate code"
+						>
+							<RefreshCw
+								className={cn(
+									"size-4",
+									saving && "animate-spin",
+								)}
+							/>
+						</Button>
+					</div>
+				</CardContent>
+			</Card>
+
+			{/* ── Invite Panel Button ──────────────────────────────────────── */}
+			<Button
+				variant="outline"
+				onClick={() => setInviteOpen(true)}
+				className="w-full gap-2"
+				size="lg"
+			>
+				<Users className="size-4" />
+				Invite Members
+			</Button>
+
 			{/* ── Save ───────────────────────────────────────────────────────── */}
 			<Button
 				onClick={handleSave}
@@ -130,6 +279,9 @@ export function RoomSettings() {
 				<Save className="size-4" />
 				{saving ? "Saving…" : "Save Changes"}
 			</Button>
+
+			{/* ── Invite Panel ─────────────────────────────────────────────── */}
+			<InvitePanel open={inviteOpen} onOpenChange={setInviteOpen} />
 		</div>
 	);
 }
