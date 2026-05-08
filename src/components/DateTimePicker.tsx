@@ -42,10 +42,7 @@ function parseTs(value: string): {
   const h24  = dateObj.getHours();
   const period: "AM" | "PM" = h24 >= 12 ? "PM" : "AM";
   const h12  = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
-  // Snap minute to nearest 5-min step
-  const rawMin = dateObj.getMinutes();
-  const snapped = Math.round(rawMin / 5) * 5;
-  const minute  = String(snapped >= 60 ? 55 : snapped).padStart(2, "0");
+  const minute  = dateObj.getMinutes().toString()
   return { dateObj, hour: String(h12).padStart(2, "0"), minute, period };
 }
 
