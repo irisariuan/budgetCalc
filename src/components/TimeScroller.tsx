@@ -17,10 +17,12 @@ import { cn } from "@/lib/utils";
 const ITEM_H = 40; // px – height of each list item
 const VISIBLE = 5; // number of rows visible at once
 const DRAG_THRESHOLD = 4; // px – minimum movement before we call it a drag
-const WHEEL_SENSITIVITY = 0.35; // fraction of raw deltaY applied to scrollTop
-const DRAG_SENSITIVITY = 0.55; // fraction of raw drag delta applied to scrollTop
-const SCROLL_DURATION = 300; // ms – max duration of the snap animation
-const SETTLE_DELAY = 160; // ms of idle before snapping to nearest item
+const WHEEL_SENSITIVITY = 0.1; // fraction of raw deltaY applied to scrollTop (lower = less friction)
+const DRAG_SENSITIVITY = 0.85; // fraction of raw drag delta applied to scrollTop
+const SCROLL_DURATION = 500; // ms – max duration of the snap animation
+const BOUNCE_OVERSHOOT = 1.15; // >1 overshoots then settles back = bouncy feel
+const MOMENTUM_FRICTION = 0.92; // per-frame velocity decay (lower = less momentum)
+const MOMENTUM_MIN_VELOCITY = 0.5; // px/frame – below this, settle to nearest item
 
 interface ScrollerColumnProps {
 	items: string[];
@@ -51,6 +53,10 @@ export function ScrollerColumn({
 	const dragStartScrollTop = useRef(0);
 	const totalMovedY = useRef(0);
 
+	// ── Momentum tracking ─────────────────────────────────────────────────────
+	// Store recent drag samples: { y, time } for velocity calculation
+	const dragSamplesRef = useRef<Array<{ y: number; time: number }>>([]);
+
 	// ── Custom eased scroll animation ─────────────────────────────────────────
 	// Using rAF instead of scrollTo({ behavior:'smooth' }) gives us:
 	//   • a real ease-out-cubic curve
@@ -65,19 +71,28 @@ export function ScrollerColumn({
 		const startTop = el.scrollTop;
 		const distance = targetTop - startTop;
 
-		if (Math.abs(distance) < 0.5) {
-			el.scrollTop = targetTop;
-			programmaticRef.current = false;
-			return;
-		}
-
-		// Scale duration: short snaps feel snappier, long scrolls stay smooth
-		const duration = Math.min(
-			SCROLL_DURATION,
-			80 + Math.abs(distance) * 2.5,
+		// Always animate — even tiny distances get a smooth transition
+		const duration = Math.max(
+			80,
+			Math.min(SCROLL_DURATION, 80 + Math.abs(distance) * 2.5),
 		);
 		const startTime = performance.now();
-		const ease = (t: number) => 1 - (1 - t) ** 3; // ease-out cubic
+
+		// Bouncy ease-out-back: overshoots target then settles back.
+		// The overshoot amount scales with distance so short snaps still feel
+		// snappy while long scrolls get a more pronounced bounce.
+		const ease = (t: number) => {
+			const t1 = t - 1;
+			// ease-out-back with configurable overshoot
+			const backEase =
+				1 +
+				(BOUNCE_OVERSHOOT - 1) * t1 ** 3 +
+				BOUNCE_OVERSHOOT * t1 ** 2;
+			const cubicEase = 1 - (1 - t) ** 3;
+			// Blend factor: more overshoot for longer distances
+			const blend = Math.min(1, Math.abs(distance) / (ITEM_H * 4));
+			return cubicEase + blend * (backEase - cubicEase);
+		};
 
 		programmaticRef.current = true;
 
@@ -136,7 +151,7 @@ export function ScrollerColumn({
 	// Sync when the controlled value changes externally
 	useEffect(() => {
 		const idx = items.indexOf(value);
-		if (idx >= 0) scrollToIndex(idx, false);
+		if (idx >= 0) scrollToIndex(idx, true);
 	}, [value, items, scrollToIndex]);
 
 	// ── Non-passive wheel listener ────────────────────────────────────────────
@@ -159,11 +174,8 @@ export function ScrollerColumn({
 
 			el.scrollTop += e.deltaY * WHEEL_SENSITIVITY;
 
-			clearTimeout(timerRef.current);
-			timerRef.current = setTimeout(
-				() => settleRef.current(),
-				SETTLE_DELAY,
-			);
+			// Snap immediately after each wheel event
+			settleRef.current();
 		};
 
 		el.addEventListener("wheel", onWheel, { passive: false });
@@ -174,8 +186,8 @@ export function ScrollerColumn({
 
 	const handleScroll = () => {
 		if (programmaticRef.current) return;
-		clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => settleRef.current(), SETTLE_DELAY);
+		// Snap immediately on native scroll (touch momentum)
+		settleRef.current();
 	};
 
 	// ── Keyboard ──────────────────────────────────────────────────────────────
@@ -236,6 +248,16 @@ export function ScrollerColumn({
 			// Apply sensitivity multiplier so the drum doesn't fly past items
 			containerRef.current.scrollTop =
 				dragStartScrollTop.current + rawDelta * DRAG_SENSITIVITY;
+			// Record sample for momentum tracking
+			dragSamplesRef.current.push({
+				y: e.clientY,
+				time: performance.now(),
+			});
+			// Keep only recent samples (last ~150ms)
+			const cutoff = performance.now() - 150;
+			dragSamplesRef.current = dragSamplesRef.current.filter(
+				(s) => s.time > cutoff,
+			);
 		}
 	};
 
@@ -261,13 +283,62 @@ export function ScrollerColumn({
 				if (items[clamped] !== value) onChange(items[clamped]);
 			}
 		} else {
-			// ── Drag ended — settle to nearest item ──────────────────────────
+			// ── Drag ended — apply momentum or snap ──────────────────────────
 			clearTimeout(timerRef.current);
-			timerRef.current = setTimeout(
-				() => settleRef.current(),
-				SETTLE_DELAY,
-			);
+			const samples = dragSamplesRef.current;
+			dragSamplesRef.current = [];
+
+			if (samples.length >= 2) {
+				// Calculate velocity from recent samples
+				const first = samples[0];
+				const last = samples[samples.length - 1];
+				const dt = last.time - first.time;
+				if (dt > 10) {
+					const velocity = (last.y - first.y) / dt; // px/ms
+					const el = containerRef.current;
+					if (el && Math.abs(velocity) > 0.3) {
+						// Start momentum scroll with initial velocity (negated to match drag direction)
+						startMomentumScroll(el, -velocity * 16); // convert to px/frame approx
+						return;
+					}
+				}
+			}
+			// No meaningful momentum — snap immediately
+			settleRef.current();
 		}
+	};
+
+	// ── Momentum scroll animation ─────────────────────────────────────────────
+	// Continues scrolling after drag release with decelerating velocity.
+	const momentumRef = useRef<{ raf: number; velocity: number } | null>(null);
+
+	const startMomentumScroll = (el: HTMLElement, initialVelocity: number) => {
+		if (momentumRef.current) {
+			cancelAnimationFrame(momentumRef.current.raf);
+		}
+
+		let velocity = initialVelocity;
+		programmaticRef.current = true;
+
+		const step = () => {
+			velocity *= MOMENTUM_FRICTION; // decelerate
+			el.scrollTop += velocity;
+
+			if (Math.abs(velocity) < MOMENTUM_MIN_VELOCITY) {
+				// Velocity depleted — snap to nearest item
+				programmaticRef.current = false;
+				momentumRef.current = null;
+				settleRef.current();
+				return;
+			}
+
+			momentumRef.current = {
+				raf: requestAnimationFrame(step),
+				velocity,
+			};
+		};
+
+		momentumRef.current = { raf: requestAnimationFrame(step), velocity };
 	};
 
 	// ── Render ────────────────────────────────────────────────────────────────
