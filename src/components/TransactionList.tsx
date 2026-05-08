@@ -368,31 +368,31 @@ export function TransactionList() {
 	const currency = state.room?.currency ?? "USD";
 
 	// ── Detail panel state ────────────────────────────────────────────────────
-	const [selectedExpense, setSelectedExpense] = useState<Expense | null>(
+	const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(
 		null,
 	);
 	const [expenseDetailOpen, setExpenseDetailOpen] = useState(false);
 
-	const [selectedAdjustment, setSelectedAdjustment] =
-		useState<BalanceAdjustment | null>(null);
+	const [selectedAdjustmentId, setSelectedAdjustmentId] =
+		useState<string | null>(null);
 	const [adjustmentDetailOpen, setAdjustmentDetailOpen] = useState(false);
 
 	const handleExpenseClick = (expense: Expense) => {
-		setSelectedExpense(expense);
+		setSelectedExpenseId(expense.id);
 		setExpenseDetailOpen(true);
 	};
 	const handleExpenseDetailOpenChange = (open: boolean) => {
 		setExpenseDetailOpen(open);
-		if (!open) setTimeout(() => setSelectedExpense(null), 300);
+		if (!open) setTimeout(() => setSelectedExpenseId(null), 300);
 	};
 
 	const handleAdjustmentClick = (adjustment: BalanceAdjustment) => {
-		setSelectedAdjustment(adjustment);
+		setSelectedAdjustmentId(adjustment.id);
 		setAdjustmentDetailOpen(true);
 	};
 	const handleAdjustmentDetailOpenChange = (open: boolean) => {
 		setAdjustmentDetailOpen(open);
-		if (!open) setTimeout(() => setSelectedAdjustment(null), 300);
+		if (!open) setTimeout(() => setSelectedAdjustmentId(null), 300);
 	};
 
 	// ── Build unified sorted list ─────────────────────────────────────────────
@@ -556,14 +556,14 @@ export function TransactionList() {
 
 			{/* Expense detail panel */}
 			<ExpenseDetailPanel
-				expense={selectedExpense}
+				expenseId={selectedExpenseId}
 				open={expenseDetailOpen}
 				onOpenChange={handleExpenseDetailOpenChange}
 			/>
 
 			{/* Adjustment detail panel */}
 			<AdjustmentDetailPanel
-				adjustment={selectedAdjustment}
+				adjustmentId={selectedAdjustmentId}
 				open={adjustmentDetailOpen}
 				onOpenChange={handleAdjustmentDetailOpenChange}
 			/>

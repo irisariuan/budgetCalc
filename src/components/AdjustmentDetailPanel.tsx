@@ -569,23 +569,29 @@ function AdjustmentEditContent({
 // ─── Public Panel ─────────────────────────────────────────────────────────────
 
 export interface AdjustmentDetailPanelProps {
-	adjustment: BalanceAdjustment | null;
+	adjustmentId: string | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
 
 export function AdjustmentDetailPanel({
-	adjustment,
+	adjustmentId,
 	open,
 	onOpenChange,
 }: AdjustmentDetailPanelProps) {
+	const { state } = useStore();
 	const isDesktop = useMediaQuery("(min-width: 768px)");
 	const [isEditing, setIsEditing] = useState(false);
+
+	// Look up current adjustment from store by ID
+	const adjustment = adjustmentId
+		? state.balanceAdjustments.find((a) => a.id === adjustmentId) || null
+		: null;
 
 	// Reset edit mode whenever a new adjustment is shown or panel closes
 	useEffect(() => {
 		if (!open) setIsEditing(false);
-	}, [open, adjustment?.id]);
+	}, [open, adjustmentId]);
 
 	if (!adjustment) return null;
 
