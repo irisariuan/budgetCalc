@@ -187,9 +187,11 @@ export async function uploadReceiptFile(
 ): Promise<string[] | null> {
 	if (!supabase) return null;
 	const urls = [];
-	for (const file of files) {
+	for (let i = 0; i < files.length; i++) {
+		const file = files[i];
 		const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-		const path = `${roomId}/${expenseId}.${ext}`;
+		// Use index to ensure unique filenames for multiple receipts
+		const path = `${roomId}/${expenseId}_${i}.${ext}`;
 
 		const { error } = await supabase.storage
 			.from(RECEIPTS_BUCKET)

@@ -19,7 +19,6 @@ import {
 	mapBalanceAdjustment,
 	uploadReceiptFile,
 	deleteReceiptFile,
-	filesToDataUrl,
 } from "@/lib/supabase";
 import type {
 	DbMember,
@@ -773,36 +772,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				const now = new Date().toISOString();
 
 				// ── Handle receipt file ─────────────────────────────────────────
-				let receiptUrls = new Set<string>(
-					expenseData.receipts.map((r) => r.url),
-				);
-				if (expenseData.receipts.length > 0) {
-					if (supabase) {
-						// Upload to Supabase Storage
-						const urls = await uploadReceiptFile(
+				let receiptUrls: string[] = [];
+				if (supabase && expenseData.receipts.length > 0) {
+					// Upload new files to Supabase Storage
+					const filesToUpload = expenseData.receipts
+						.map((r) => r.file)
+						.filter((f): f is File => !!f);
+
+					if (filesToUpload.length > 0) {
+						const uploadedUrls = await uploadReceiptFile(
 							room.id,
 							id,
-							expenseData.receipts
-								.map((v) => v.file)
-								.filter((v) => !!v),
+							filesToUpload,
 						);
-						if (urls)
-							for (const url of urls) {
-								receiptUrls.add(url);
-							}
-					} else {
-						// Offline: store as base64 data URL in localStorage
-						try {
-							const urls = await filesToDataUrl(
-								expenseData.receipts
-									.map((v) => v.file)
-									.filter((v) => !!v),
-							);
-							for (const url of urls) {
-								receiptUrls.add(url);
-							}
-						} catch {
-							// skip receipt if conversion fails
+						if (uploadedUrls) {
+							receiptUrls = uploadedUrls;
 						}
 					}
 				}
@@ -816,7 +800,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: expenseData.source,
 					paidById: expenseData.paidById ?? null,
 					splitAmong: expenseData.splitAmong,
-					receiptUrl: Array.from(receiptUrls),
+					receiptUrl: receiptUrls.length > 0 ? receiptUrls : null,
 					createdAt: now,
 				};
 
@@ -830,7 +814,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						source: expense.source,
 						paid_by_id: expense.paidById,
 						split_among: expense.splitAmong,
-						receipt_url: Array.from(receiptUrls),
+						receipt_url: receiptUrls.length > 0 ? receiptUrls : null,
 					});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
@@ -903,7 +887,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				const existing = expenses.find((e) => e.id === expenseId);
 				if (!existing) return;
 
-				// Handle receipt changes
+				// ── Handle receipt changes ──────────────────────────────────────
+				let receiptUrls: string[] = [];
+
+				if (supabase) {
+					// Identify existing URLs vs new files
+					const existingUrls: string[] = [];
+					const newFiles: File[] = [];
+
+					for (const receipt of data.receipts) {
+						if (receipt.file) {
+							// New file to upload
+							newFiles.push(receipt.file);
+						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
+							// Existing URL from database
+							existingUrls.push(receipt.url);
+						}
+					}
+
+					// Delete receipts that were removed
+					if (existing.receiptUrl) {
+						for (const oldUrl of existing.receiptUrl) {
+							if (!existingUrls.includes(oldUrl)) {
+								await deleteReceiptFile(oldUrl);
+							}
+						}
+					}
+
+					// Upload new files
+					if (newFiles.length > 0) {
+						const uploadedUrls = await uploadReceiptFile(
+							room.id,
+							expenseId,
+							newFiles,
+						);
+						if (uploadedUrls) {
+							receiptUrls = [...existingUrls, ...uploadedUrls];
+						} else {
+							receiptUrls = existingUrls;
+						}
+					} else {
+						receiptUrls = existingUrls;
+					}
+				}
 
 				const updated: Expense = {
 					...existing,
@@ -913,7 +939,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: data.source,
 					paidById: data.paidById,
 					splitAmong: data.splitAmong,
-					receiptUrl: data.receipts.map(v => v.url)
+					receiptUrl: receiptUrls.length > 0 ? receiptUrls : null,
 				};
 
 				if (supabase) {
