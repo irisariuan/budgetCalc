@@ -84,7 +84,10 @@ export function RoomSetup() {
 	useEffect(() => {
 		if (!supabase) return;
 		(async () => {
-			const { data, error } = await supabase.from("rooms").select("*");
+			const { data, error } = await supabase
+				.from("rooms")
+				.select("*")
+				.eq("listed", true);
 			if (error) {
 				return setRooms([]);
 			}
@@ -94,6 +97,7 @@ export function RoomSetup() {
 					currency: v.currency,
 					id: v.id,
 					name: v.name,
+					listed: v.listed ?? true,
 				})),
 			);
 		})();

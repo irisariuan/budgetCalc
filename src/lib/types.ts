@@ -18,6 +18,8 @@ export interface Room {
 	name: string;
 	currency: string;
 	createdAt: string;
+	/** Whether this room is shown in the public room list on the join screen. */
+	listed: boolean;
 }
 
 export interface Member {

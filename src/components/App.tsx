@@ -1,17 +1,26 @@
-import { PlaneTakeoff } from "lucide-react";
+import { useState } from "react";
+import { PlaneTakeoff, LayoutDashboard, Settings } from "lucide-react";
 import { StoreProvider, useStore } from "@/lib/store";
 import { RoomSetup } from "@/components/RoomSetup";
+import { RoomSettings } from "@/components/RoomSettings";
 import { ChartsView } from "@/components/ChartsView";
 import { UserManagement } from "@/components/UserManagement";
 import { TransactionList } from "@/components/TransactionList";
 import { HotBar } from "@/components/HotBar";
-import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Page = "home" | "settings";
 
 // ─── Inner app (must live inside StoreProvider) ───────────────────────────────
 
 function AppInner() {
 	const { state } = useStore();
 	const { room } = state;
+
+	const [page, setPage] = useState<Page>("home");
 
 	// URL param (?room=XXXXXX) auto-join is handled inside StoreProvider's
 	// useEffect on mount — no additional logic needed here.
@@ -26,34 +35,70 @@ function AppInner() {
 		<>
 			{/* Main scroll area — padded at the bottom so content clears the HotBar */}
 			<div className="flex flex-col min-h-screen pb-20">
-				{/* Header */}
+				{/* Header / nav bar */}
 				<header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-background/80 backdrop-blur-md px-4 py-3">
-					<div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-						<PlaneTakeoff className="size-4" />
+					{/* Left: logo + room name */}
+					<div className="flex items-center gap-3 min-w-0 flex-1">
+						<div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+							<PlaneTakeoff className="size-4" />
+						</div>
+						<div className="flex items-baseline gap-2 min-w-0">
+							<span className="font-bold tracking-tight text-foreground">
+								BudgetCalc
+							</span>
+							<span className="text-muted-foreground truncate">
+								/ {room.name}
+							</span>
+						</div>
 					</div>
-					<div className="flex items-baseline gap-2 min-w-0">
-						<span className="font-bold tracking-tight text-foreground">
-							BudgetCalc
-						</span>
-						<span className="text-muted-foreground truncate">
-							/ {room.name}
-						</span>
-					</div>
+
+					{/* Right: nav */}
+					<nav className="flex items-center gap-0.5 shrink-0">
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => setPage("home")}
+							title="Dashboard"
+							className={cn(
+								page === "home" &&
+									"bg-accent text-accent-foreground",
+							)}
+						>
+							<LayoutDashboard className="size-4" />
+							<span className="sr-only">Dashboard</span>
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => setPage("settings")}
+							title="Room Settings"
+							className={cn(
+								page === "settings" &&
+									"bg-accent text-accent-foreground",
+							)}
+						>
+							<Settings className="size-4" />
+							<span className="sr-only">Room Settings</span>
+						</Button>
+					</nav>
 				</header>
 
 				{/* Content */}
 				<main className="flex-1 flex flex-col gap-4 p-3">
-					<ChartsView />
-					<TransactionList />
-					<UserManagement />
+					{page === "home" ? (
+						<>
+							<ChartsView />
+							<TransactionList />
+							<UserManagement />
+						</>
+					) : (
+						<RoomSettings />
+					)}
 				</main>
 			</div>
 
 			{/* Sticky bottom action bar */}
 			<HotBar />
-
-			{/* Toast notifications (e.g. undo after delete) */}
-			<Toaster position="bottom-center" richColors />
 		</>
 	);
 }

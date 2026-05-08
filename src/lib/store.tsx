@@ -21,6 +21,7 @@ import {
 	deleteReceiptFile,
 } from "@/lib/supabase";
 import type {
+	DbRoom,
 	DbMember,
 	DbExpense,
 	DbBudgetAddition,
@@ -112,6 +113,7 @@ interface StoreActions {
 		},
 	) => Promise<void>;
 	restoreBalanceAdjustment: (adjustment: BalanceAdjustment) => Promise<void>;
+	updateRoom: (data: { name?: string; listed?: boolean }) => Promise<void>;
 }
 
 interface StoreContextValue {
@@ -614,14 +616,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 			createRoom: async (name, currency = "USD") => {
 				const id = generateRoomId();
 				const now = new Date().toISOString();
-				const room: Room = { id, name, currency, createdAt: now };
+				const room: Room = {
+					id,
+					name,
+					currency,
+					createdAt: now,
+					listed: true,
+				};
 
 				if (supabase) {
 					dispatch({ type: "SET_STATUS", payload: "loading" });
 
 					const { error } = await supabase
 						.from("rooms")
-						.insert({ id, name, currency });
+						.insert({ id, name, currency, listed: true });
 
 					if (error) {
 						dispatch({ type: "SET_ERROR", payload: error.message });
@@ -1269,6 +1277,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							a.id === adjustmentId ? updated : a,
 						),
 					});
+				}
+			},
+
+			// ── updateRoom ─────────────────────────────────────────────────────────
+			updateRoom: async (data) => {
+				const { room } = stateRef.current;
+				if (!room) return;
+
+				const updated: Room = { ...room, ...data };
+
+				// Optimistic update — apply immediately so the UI reacts.
+				dispatch({ type: "SET_ROOM", payload: updated });
+
+				if (supabase) {
+					const patch: Partial<Omit<DbRoom, "id" | "created_at">> =
+						{};
+					if (data.name !== undefined) patch.name = data.name;
+					if (data.listed !== undefined) patch.listed = data.listed;
+					const { error } = await supabase
+						.from("rooms")
+						.update(patch)
+						.eq("id", room.id);
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+				} else {
+					saveRoomToLocalStorage(room.id, { room: updated });
 				}
 			},
 		}),

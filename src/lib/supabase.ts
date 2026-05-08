@@ -12,6 +12,8 @@ export type DbRoom = {
 	name: string;
 	currency: string;
 	created_at: string;
+	/** Defaults to true; false hides the room from the public list. */
+	listed: boolean;
 };
 
 export type DbMember = {
@@ -119,6 +121,8 @@ export function mapRoom(row: DbRoom): Room {
 		name: row.name,
 		currency: row.currency,
 		createdAt: row.created_at,
+		// Default true so existing rows without the column stay visible.
+		listed: row.listed ?? true,
 	};
 }
 
@@ -194,7 +198,10 @@ export async function uploadReceiptFile(
 
 		const { error } = await supabase.storage
 			.from(RECEIPTS_BUCKET)
-			.upload(path, receipt.file, { upsert: true, contentType: receipt.file.type });
+			.upload(path, receipt.file, {
+				upsert: true,
+				contentType: receipt.file.type,
+			});
 		if (error) {
 			console.error("Receipt upload failed:", error.message);
 			continue;
