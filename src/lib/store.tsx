@@ -236,6 +236,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_BUDGET_ADDITIONS":
 			return { ...state, budgetAdditions: action.payload };
 		case "ADD_BUDGET_ADDITION":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (state.budgetAdditions.some((a) => a.id === action.payload.id)) {
+				return state;
+			}
 			return {
 				...state,
 				budgetAdditions: [...state.budgetAdditions, action.payload],
@@ -250,6 +254,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_BALANCE_ADJUSTMENTS":
 			return { ...state, balanceAdjustments: action.payload };
 		case "ADD_BALANCE_ADJUSTMENT":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (state.balanceAdjustments.some((a) => a.id === action.payload.id)) {
+				return state;
+			}
 			return {
 				...state,
 				balanceAdjustments: [
@@ -1011,6 +1019,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "ADD_BUDGET_ADDITION",
+						payload: addition,
+					});
+
+					// Then insert into database
 					const { error } = await supabase
 						.from("budget_additions")
 						.insert({
@@ -1022,7 +1037,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT handler will dispatch ADD_BUDGET_ADDITION.
+					// Real-time INSERT handler will also dispatch ADD_BUDGET_ADDITION, but duplicate prevention handles it
 				} else {
 					dispatch({
 						type: "ADD_BUDGET_ADDITION",
@@ -1075,6 +1090,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "ADD_BALANCE_ADJUSTMENT",
+						payload: adjustment,
+					});
+
+					// Then insert into database
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.insert({
@@ -1087,7 +1109,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT will dispatch ADD_BALANCE_ADJUSTMENT.
+					// Real-time INSERT will also dispatch ADD_BALANCE_ADJUSTMENT, but duplicate prevention handles it
 				} else {
 					dispatch({
 						type: "ADD_BALANCE_ADJUSTMENT",
@@ -1177,6 +1199,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "UPDATE_BALANCE_ADJUSTMENT",
+						payload: updated,
+					});
+
+					// Then update database
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.update({
@@ -1188,7 +1217,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						.eq("id", adjustmentId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Realtime UPDATE handler will dispatch UPDATE_BALANCE_ADJUSTMENT.
+					// Realtime UPDATE handler will also dispatch UPDATE_BALANCE_ADJUSTMENT, but that's okay
 				} else {
 					dispatch({
 						type: "UPDATE_BALANCE_ADJUSTMENT",
