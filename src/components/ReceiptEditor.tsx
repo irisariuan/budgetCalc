@@ -116,7 +116,7 @@ export default function ReceiptEditor({
 	const canAdd = receipts.length < MAX_FILE;
 
 	return (
-		<div className="space-y-2">
+		<div>
 			{/* Thumbnail grid */}
 			{receipts.length > 0 && (
 				<ReceiptGallery
@@ -134,7 +134,7 @@ export default function ReceiptEditor({
 
 			{/* Add zone */}
 			{canAdd && (
-				<div className="space-y-1.5">
+				<div className="space-y-1.5 mt-2">
 					<button
 						type="button"
 						onClick={() => addInputRef.current?.click()}
