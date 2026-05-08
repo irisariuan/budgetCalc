@@ -35,7 +35,7 @@ import type {
 	AppState,
 	AuthUser,
 	BalanceAdjustment,
-	BudgetAddition,
+	BudgetAdjustment,
 	Expense,
 	Member,
 	Room,
@@ -49,7 +49,7 @@ interface LocalRoomData {
 	room: Room;
 	members: Member[];
 	expenses: Expense[];
-	budgetAdditions: BudgetAddition[];
+	budgetAdditions: BudgetAdjustment[];
 	balanceAdjustments: BalanceAdjustment[];
 	lastUpdated: string;
 }
@@ -108,6 +108,14 @@ interface StoreActions {
 		amount: number;
 		date: string;
 	}) => Promise<void>;
+	updateBudgetAddition: (
+		id: string,
+		data: {
+			description: string;
+			amount: number;
+			date: string;
+		},
+	) => Promise<void>;
 	removeBudgetAddition: (id: string) => Promise<void>;
 	addBalanceAdjustment: (data: {
 		memberId: string;
@@ -332,6 +340,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 			return {
 				...state,
 				budgetAdditions: [...state.budgetAdditions, action.payload],
+			};
+		case "UPDATE_BUDGET_ADDITION":
+			return {
+				...state,
+				budgetAdditions: state.budgetAdditions.map((b) =>
+					b.id === action.payload.id ? action.payload : b,
+				),
 			};
 		case "REMOVE_BUDGET_ADDITION":
 			return {
@@ -588,6 +603,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					dispatch({
 						type: "REMOVE_BUDGET_ADDITION",
 						payload: (payload.old as { id: string }).id,
+					});
+				},
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "budget_additions",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "UPDATE_BUDGET_ADDITION",
+						payload: mapBudgetAddition(
+							payload.new as DbBudgetAddition,
+						),
 					});
 				},
 			)
@@ -1470,7 +1502,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 				const id = crypto.randomUUID();
 				const now = new Date().toISOString();
-				const addition: BudgetAddition = {
+				const addition: BudgetAdjustment = {
 					id,
 					roomId: room.id,
 					description: additionData.description,
@@ -1496,6 +1528,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							amount: addition.amount,
 							date: addition.date,
 						});
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+					// Real-time INSERT handler will also dispatch ADD_BUDGET_ADDITION, but duplicate prevention handles it
+				} else {
+					dispatch({
+						type: "ADD_BUDGET_ADDITION",
+						payload: addition,
+					});
+					saveRoomToLocalStorage(room.id, {
+						budgetAdditions: [...budgetAdditions, addition],
+					});
+				}
+			},
+			updateBudgetAddition: async (id, additionData) => {
+				const { room, budgetAdditions } = stateRef.current;
+				if (!room) return;
+
+				const now = new Date().toISOString();
+				const addition: BudgetAdjustment = {
+					id,
+					roomId: room.id,
+					description: additionData.description,
+					amount: additionData.amount,
+					date: additionData.date,
+					createdAt: now,
+				};
+
+				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "UPDATE_BUDGET_ADDITION",
+						payload: addition,
+					});
+
+					// Then insert into database
+					const { error } = await supabase
+						.from("budget_additions")
+						.update({
+							description: addition.description || null,
+							amount: addition.amount,
+							date: addition.date,
+						})
+						.eq("id", addition.id);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
 					// Real-time INSERT handler will also dispatch ADD_BUDGET_ADDITION, but duplicate prevention handles it

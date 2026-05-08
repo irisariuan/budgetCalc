@@ -89,21 +89,21 @@ function fmtDateShort(dateStr: string): string {
 
 // ─── Member Balances Bar Chart ────────────────────────────────────────────────
 
-function BalancesAtTimeChart({
-	expense,
+export function BalancesAtTimeChart({
+	date,
 	currency,
 }: {
-	expense: Expense;
+	date: Date;
 	currency: string;
 }) {
 	const { state } = useStore();
 
 	const chartData = useMemo(() => {
 		const filteredExpenses = state.expenses.filter(
-			(e) => e.source === "personal" && e.date <= expense.date,
+			(e) => e.source === "personal" && new Date(e.date) <= date,
 		);
 		const filteredAdjustments = state.balanceAdjustments.filter(
-			(a) => a.date <= expense.date,
+			(a) => new Date(a.date) <= date,
 		);
 		const balances = calculateCurrentBalances(
 			state.members,
@@ -115,7 +115,7 @@ function BalancesAtTimeChart({
 			balance: Math.round((balances[m.id] ?? 0) * 100) / 100,
 			color: m.color,
 		}));
-	}, [state.expenses, state.members, state.balanceAdjustments, expense.date]);
+	}, [state.expenses, state.members, state.balanceAdjustments, date]);
 
 	const chartConfig = useMemo<ChartConfig>(() => {
 		const cfg: ChartConfig = {};
@@ -195,25 +195,25 @@ function BalancesAtTimeChart({
 
 // ─── Group Budget Area Chart ──────────────────────────────────────────────────
 
-function GroupBudgetAtTimeChart({
-	expense,
+export function GroupBudgetAtTimeChart({
+	date,
 	currency,
 }: {
-	expense: Expense;
+	date: Date;
 	currency: string;
 }) {
 	const { state } = useStore();
 
 	const { data, lastPoint } = useMemo(() => {
 		const filteredAdditions = state.budgetAdditions.filter(
-			(a) => a.date <= expense.date,
+			(a) => new Date(a.date) <= date,
 		);
 		const filteredExpenses = state.expenses.filter(
-			(e) => e.source === "group" && e.date <= expense.date,
+			(e) => e.source === "group" && new Date(e.date) <= date,
 		);
 		const d = generateBudgetChartData(filteredAdditions, filteredExpenses);
 		return { data: d, lastPoint: d[d.length - 1] };
-	}, [state.budgetAdditions, state.expenses, expense.date]);
+	}, [state.budgetAdditions, state.expenses, date]);
 
 	const chartConfig: ChartConfig = {
 		added: { label: "Budget Added", color: "#10b981" },
@@ -496,12 +496,12 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 				</span>
 				{expense.source === "personal" ? (
 					<BalancesAtTimeChart
-						expense={expense}
+						date={new Date(expense.date)}
 						currency={currency}
 					/>
 				) : (
 					<GroupBudgetAtTimeChart
-						expense={expense}
+						date={new Date(expense.date)}
 						currency={currency}
 					/>
 				)}

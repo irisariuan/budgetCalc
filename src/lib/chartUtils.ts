@@ -1,6 +1,6 @@
 import type {
 	BalanceAdjustment,
-	BudgetAddition,
+	BudgetAdjustment,
 	BudgetDataPoint,
 	BalanceDataPoint,
 	Expense,
@@ -124,7 +124,7 @@ export function formatBucketLabel(key: string, gran: Granularity): string {
  * - Always starts with a zero data point so the chart anchors at the origin.
  */
 export function generateBudgetChartData(
-	budgetAdditions: BudgetAddition[],
+	budgetAdditions: BudgetAdjustment[],
 	expenses: Expense[],
 	granularity: Granularity = "day",
 	options?: {
@@ -138,7 +138,7 @@ export function generateBudgetChartData(
 	const rangeEnd = options?.rangeEnd;
 
 	// ── Event-level filtering (for "daily" / "custom") ──────────────────────
-	const keepAddition = (a: BudgetAddition): boolean => {
+	const keepAddition = (a: BudgetAdjustment): boolean => {
 		if (granularity === "daily") return toDateOnly(a.date) === selectedDate;
 		if (granularity === "custom" && rangeStart && rangeEnd) {
 			const d = toDateOnly(a.date);

@@ -30,7 +30,7 @@ const GRANULARITIES: Granularity[] = [
 ];
 
 const LABELS: Record<Granularity, string> = {
-	daily: "Day",
+	daily: "Daily",
 	day: "Days",
 	week: "Weeks",
 	month: "Months",
