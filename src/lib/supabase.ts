@@ -7,6 +7,7 @@ import type {
 	BalanceAdjustment,
 	Expense,
 	AuthUser,
+	RoomParticipant,
 } from "./types";
 
 export type DbRoomMember = {
@@ -14,6 +15,7 @@ export type DbRoomMember = {
 	user_id: string;
 	role: "admin" | "member";
 	joined_at: string;
+	display_name: string | null;
 };
 
 export type DbRoom = {
@@ -80,10 +82,11 @@ export type Database = {
 			};
 			room_members: {
 				Row: DbRoomMember;
-				Insert: Omit<DbRoomMember, "joined_at"> & {
+				Insert: Omit<DbRoomMember, "joined_at" | "display_name"> & {
 					joined_at?: string;
+					display_name?: string | null;
 				};
-				Update: Partial<Pick<DbRoomMember, "role">>;
+				Update: Partial<Pick<DbRoomMember, "role" | "display_name">>;
 				Relationships: [];
 			};
 			members: {
@@ -161,6 +164,15 @@ export function mapUser(user: User): AuthUser {
 		fullName: (meta.full_name ?? meta.name ?? null) as string | null,
 		avatarUrl: (meta.avatar_url ?? null) as string | null,
 		isAnonymous: user.is_anonymous ?? false,
+	};
+}
+
+export function mapRoomParticipant(row: DbRoomMember): RoomParticipant {
+	return {
+		userId: row.user_id,
+		role: row.role,
+		joinedAt: row.joined_at,
+		displayName: row.display_name ?? "Anonymous",
 	};
 }
 

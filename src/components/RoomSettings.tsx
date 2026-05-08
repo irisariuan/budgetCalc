@@ -8,6 +8,8 @@ import {
 	LogOut,
 	Trash2,
 	Delete,
+	UserMinus,
+	Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -35,6 +37,7 @@ import { useStore } from "@/lib/store";
 import { InvitePanel } from "@/components/InvitePanel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import MemberDisplay from "./MemberDisplay";
 
 export function RoomSettings() {
 	const { state, actions } = useStore();
@@ -259,6 +262,9 @@ export function RoomSettings() {
 					</div>
 				</CardContent>
 			</Card>
+
+			{/* ── Members ──────────────────────────────────────────────────── */}
+			{!room.listed && <MemberDisplay />}
 
 			{/* ── Invite Panel Button ──────────────────────────────────────── */}
 			<Button

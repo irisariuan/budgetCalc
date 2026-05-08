@@ -18,6 +18,7 @@ import {
 	mapExpense,
 	mapBudgetAddition,
 	mapBalanceAdjustment,
+	mapRoomParticipant,
 	uploadReceiptFile,
 	deleteReceiptFile,
 } from "@/lib/supabase";
@@ -27,6 +28,7 @@ import type {
 	DbExpense,
 	DbBudgetAddition,
 	DbBalanceAdjustment,
+	DbRoomMember,
 } from "@/lib/supabase";
 import type {
 	AppAction,
@@ -37,6 +39,7 @@ import type {
 	Expense,
 	Member,
 	Room,
+	RoomParticipant,
 } from "@/lib/types";
 import type { Receipt } from "@/components/ReceiptEditor";
 
@@ -129,6 +132,9 @@ interface StoreActions {
 		inviteOnly?: boolean;
 		inviteCode?: string;
 	}) => Promise<void>;
+	kickParticipant: (userId: string) => Promise<void>;
+	/** Update the current user's display name in every room they belong to. */
+	updateNickname: (nickname: string) => Promise<void>;
 }
 
 interface StoreContextValue {
@@ -210,6 +216,7 @@ const initialState: AppState = {
 	status: "idle",
 	room: null,
 	members: [],
+	roomParticipants: [],
 	expenses: [],
 	budgetAdditions: [],
 	balanceAdjustments: [],
@@ -258,6 +265,34 @@ function reducer(state: AppState, action: AppAction): AppState {
 				...state,
 				members: state.members.map((m) =>
 					m.id === action.payload.id ? action.payload : m,
+				),
+			};
+		case "SET_ROOM_PARTICIPANTS":
+			return { ...state, roomParticipants: action.payload };
+		case "ADD_ROOM_PARTICIPANT":
+			if (
+				state.roomParticipants.some(
+					(p) => p.userId === action.payload.userId,
+				)
+			) {
+				return state;
+			}
+			return {
+				...state,
+				roomParticipants: [...state.roomParticipants, action.payload],
+			};
+		case "REMOVE_ROOM_PARTICIPANT":
+			return {
+				...state,
+				roomParticipants: state.roomParticipants.filter(
+					(p) => p.userId !== action.payload,
+				),
+			};
+		case "UPDATE_ROOM_PARTICIPANT":
+			return {
+				...state,
+				roomParticipants: state.roomParticipants.map((p) =>
+					p.userId === action.payload.userId ? action.payload : p,
 				),
 			};
 		case "SET_EXPENSES":
@@ -420,6 +455,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					});
 				},
 			)
+			// ── room_members ──────────────────────────────────────────────────────────
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "room_members",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "ADD_ROOM_PARTICIPANT",
+						payload: mapRoomParticipant(
+							payload.new as DbRoomMember,
+						),
+					});
+				},
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "DELETE",
+					schema: "public",
+					table: "room_members",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "REMOVE_ROOM_PARTICIPANT",
+						payload: (payload.old as DbRoomMember).user_id,
+					});
+				},
+			)
 			// ── expenses ─────────────────────────────────────────────────────────
 			.on(
 				"postgres_changes",
@@ -576,21 +644,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				return false;
 			}
 
-			const [membersRes, expensesRes, budgetRes, adjustmentsRes] =
-				await Promise.all([
-					supabase.from("members").select("*").eq("room_id", roomId),
-					supabase.from("expenses").select("*").eq("room_id", roomId),
-					supabase
-						.from("budget_additions")
-						.select("*")
-						.eq("room_id", roomId),
-					supabase
-						.from("balance_adjustments")
-						.select("*")
-						.eq("room_id", roomId),
-				]);
-
-			// Load current user's role in this room.
+			// Verify user is a member of this room before fetching data.
 			const userId = stateRef.current.user?.id;
 			let userRole: "admin" | "member" | null = null;
 			if (userId) {
@@ -600,13 +654,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					.eq("room_id", roomId)
 					.eq("user_id", userId)
 					.single();
+				if (!rm) {
+					dispatch({
+						type: "SET_STATUS",
+						payload: isOnline ? "idle" : "offline",
+					});
+					return false;
+				}
 				userRole = rm?.role ?? null;
 			}
+
+			const [
+				membersRes,
+				expensesRes,
+				budgetRes,
+				adjustmentsRes,
+				roomMembersRes,
+			] = await Promise.all([
+				supabase.from("members").select("*").eq("room_id", roomId),
+				supabase.from("expenses").select("*").eq("room_id", roomId),
+				supabase
+					.from("budget_additions")
+					.select("*")
+					.eq("room_id", roomId),
+				supabase
+					.from("balance_adjustments")
+					.select("*")
+					.eq("room_id", roomId),
+				supabase.from("room_members").select("*").eq("room_id", roomId),
+			]);
+
+			if (membersRes.error)
+				console.error(
+					"[loadRoom] members query failed:",
+					membersRes.error,
+				);
+			if (expensesRes.error)
+				console.error(
+					"[loadRoom] expenses query failed:",
+					expensesRes.error,
+				);
+			if (budgetRes.error)
+				console.error(
+					"[loadRoom] budget_additions query failed:",
+					budgetRes.error,
+				);
+			if (adjustmentsRes.error)
+				console.error(
+					"[loadRoom] balance_adjustments query failed:",
+					adjustmentsRes.error,
+				);
+			if (roomMembersRes.error)
+				console.error(
+					"[loadRoom] room_members query failed:",
+					roomMembersRes.error,
+				);
 
 			dispatch({ type: "SET_ROOM", payload: mapRoom(roomRow) });
 			dispatch({
 				type: "SET_MEMBERS",
 				payload: (membersRes.data ?? []).map(mapMember),
+			});
+			dispatch({
+				type: "SET_ROOM_PARTICIPANTS",
+				payload: (roomMembersRes.data ?? []).map(mapRoomParticipant),
 			});
 			dispatch({
 				type: "SET_EXPENSES",
@@ -688,6 +799,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 			dispatch({ type: "SET_ROOM", payload: roomData.room });
 			dispatch({ type: "SET_MEMBERS", payload: roomData.members });
+			dispatch({ type: "SET_ROOM_PARTICIPANTS", payload: [] });
 			dispatch({ type: "SET_EXPENSES", payload: roomData.expenses });
 			dispatch({
 				type: "SET_BUDGET_ADDITIONS",
@@ -874,6 +986,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 					dispatch({ type: "SET_ROOM", payload: room });
 					dispatch({ type: "SET_MEMBERS", payload: [] });
+					dispatch({
+						type: "SET_ROOM_PARTICIPANTS",
+						payload: userId
+							? [
+									{
+										userId,
+										role: "admin",
+										joinedAt: new Date().toISOString(),
+										displayName:
+											stateRef.current.user?.fullName ??
+											stateRef.current.user?.email?.split(
+												"@",
+											)[0] ??
+											"Anonymous",
+									},
+								]
+							: [],
+					});
 					dispatch({ type: "SET_EXPENSES", payload: [] });
 					dispatch({ type: "SET_BUDGET_ADDITIONS", payload: [] });
 					dispatch({ type: "SET_BALANCE_ADJUSTMENTS", payload: [] });
@@ -882,6 +1012,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				} else {
 					dispatch({ type: "SET_ROOM", payload: room });
 					dispatch({ type: "SET_MEMBERS", payload: [] });
+					dispatch({ type: "SET_ROOM_PARTICIPANTS", payload: [] });
 					dispatch({ type: "SET_EXPENSES", payload: [] });
 					dispatch({ type: "SET_BUDGET_ADDITIONS", payload: [] });
 					dispatch({ type: "SET_BALANCE_ADJUSTMENTS", payload: [] });
@@ -1008,7 +1139,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				}
 			},
 
-			// ── updateMember ───────────────────────────────────────────────────────
+			// ── kickParticipant ───────────────────────────────────────────────────────
+			kickParticipant: async (userId) => {
+				const { room } = stateRef.current;
+				if (!room || !supabase) return;
+				const { error } = await supabase
+					.from("room_members")
+					.delete()
+					.eq("room_id", room.id)
+					.eq("user_id", userId);
+				if (error) {
+					dispatch({ type: "SET_ERROR", payload: error.message });
+					return;
+				}
+				// Realtime DELETE listener will handle state, but dispatch manually as fallback
+				dispatch({ type: "REMOVE_ROOM_PARTICIPANT", payload: userId });
+			},
+
+			// ── updateMember ─────────────────────────────────────────────────────
 			updateMember: async (memberId, name, color) => {
 				const { room, members } = stateRef.current;
 				if (!room) return;
@@ -1561,6 +1709,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						dispatch({ type: "SET_ERROR", payload: error.message });
 				} else {
 					saveRoomToLocalStorage(room.id, { room: updated });
+				}
+			},
+
+			// ── updateNickname ────────────────────────────────────────────────────
+			updateNickname: async (nickname) => {
+				const { user, roomParticipants } = stateRef.current;
+				if (!user) return;
+
+				if (supabase) {
+					const { error } = await supabase
+						.from("room_members")
+						.update({ display_name: nickname })
+						.eq("user_id", user.id);
+					if (error) {
+						dispatch({ type: "SET_ERROR", payload: error.message });
+						return;
+					}
+				}
+
+				// Optimistically update the current participant in local state.
+				const participant = roomParticipants.find(
+					(p) => p.userId === user.id,
+				);
+				if (participant) {
+					dispatch({
+						type: "UPDATE_ROOM_PARTICIPANT",
+						payload: { ...participant, displayName: nickname },
+					});
 				}
 			},
 		}),

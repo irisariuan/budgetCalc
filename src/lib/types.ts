@@ -32,7 +32,13 @@ export interface Member {
 	name: string;
 	color: string;
 	createdAt: string;
-	role?: "admin" | "member";
+}
+
+export interface RoomParticipant {
+	userId: string;
+	role: "admin" | "member";
+	joinedAt: string;
+	displayName: string;
 }
 
 export type ExpenseSource = "group" | "personal";
@@ -95,6 +101,7 @@ export interface AppState {
 	status: StoreStatus;
 	room: Room | null;
 	members: Member[];
+	roomParticipants: RoomParticipant[];
 	expenses: Expense[];
 	budgetAdditions: BudgetAddition[];
 	balanceAdjustments: BalanceAdjustment[];
@@ -116,6 +123,10 @@ export type AppAction =
 	| { type: "ADD_MEMBER"; payload: Member }
 	| { type: "REMOVE_MEMBER"; payload: string }
 	| { type: "UPDATE_MEMBER"; payload: Member }
+	| { type: "SET_ROOM_PARTICIPANTS"; payload: RoomParticipant[] }
+	| { type: "ADD_ROOM_PARTICIPANT"; payload: RoomParticipant }
+	| { type: "REMOVE_ROOM_PARTICIPANT"; payload: string }
+	| { type: "UPDATE_ROOM_PARTICIPANT"; payload: RoomParticipant }
 	| { type: "SET_EXPENSES"; payload: Expense[] }
 	| { type: "ADD_EXPENSE"; payload: Expense }
 	| { type: "REMOVE_EXPENSE"; payload: string }
