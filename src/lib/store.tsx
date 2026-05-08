@@ -962,6 +962,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({ type: "UPDATE_EXPENSE", payload: updated });
+
+					// Then update database
 					const { error } = await supabase
 						.from("expenses")
 						.update({
@@ -976,7 +980,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						.eq("id", expenseId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Realtime UPDATE handler will dispatch UPDATE_EXPENSE.
+					// Realtime UPDATE handler will also dispatch UPDATE_EXPENSE, but that's okay
 				} else {
 					dispatch({ type: "UPDATE_EXPENSE", payload: updated });
 					saveRoomToLocalStorage(room.id, {
