@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { LogOut, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-	HoverCard,
-	HoverCardContent,
-	HoverCardTrigger,
-} from "@/components/ui/hover-card";
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import type { AuthUser } from "@/lib/types";
 
 interface UserAvatarButtonProps {
@@ -22,9 +23,21 @@ export function UserAvatarButton({
 	onSignOut,
 	onOpenSettings,
 }: UserAvatarButtonProps) {
+	const [open, setOpen] = useState(false);
+
+	const handleSettings = () => {
+		setOpen(false);
+		onOpenSettings();
+	};
+
+	const handleSignOut = () => {
+		setOpen(false);
+		onSignOut();
+	};
+
 	return (
-		<HoverCard>
-			<HoverCardTrigger asChild>
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
 				<button
 					className="ml-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold ring-1 ring-primary/20 hover:bg-primary/20 transition-colors"
 					title={userLabel ?? "User"}
@@ -39,8 +52,8 @@ export function UserAvatarButton({
 						userInitial
 					)}
 				</button>
-			</HoverCardTrigger>
-			<HoverCardContent align="end" className="w-56 p-3">
+			</PopoverTrigger>
+			<PopoverContent align="end" className="w-56 p-3">
 				<div className="mb-3">
 					<p className="text-sm font-medium leading-none">
 						{userLabel ?? "Guest"}
@@ -61,7 +74,7 @@ export function UserAvatarButton({
 						variant="outline"
 						size="sm"
 						className="w-full gap-2"
-						onClick={onOpenSettings}
+						onClick={handleSettings}
 					>
 						<UserCog className="size-3.5" />
 						Profile Settings
@@ -70,13 +83,13 @@ export function UserAvatarButton({
 						variant="outline"
 						size="sm"
 						className="w-full gap-2"
-						onClick={onSignOut}
+						onClick={handleSignOut}
 					>
 						<LogOut className="size-3.5" />
 						Sign out
 					</Button>
 				</div>
-			</HoverCardContent>
-		</HoverCard>
+			</PopoverContent>
+		</Popover>
 	);
 }
