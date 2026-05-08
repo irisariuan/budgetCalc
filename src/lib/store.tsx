@@ -216,6 +216,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_EXPENSES":
 			return { ...state, expenses: action.payload };
 		case "ADD_EXPENSE":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (state.expenses.some((e) => e.id === action.payload.id)) {
+				return state;
+			}
 			return { ...state, expenses: [...state.expenses, action.payload] };
 		case "REMOVE_EXPENSE":
 			return {
@@ -821,6 +825,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({ type: "ADD_EXPENSE", payload: expense });
+
+					// Then insert into database
 					const { error } = await supabase.from("expenses").insert({
 						id,
 						room_id: room.id,
@@ -834,7 +842,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT handler will dispatch ADD_EXPENSE.
+					// Real-time INSERT handler will also dispatch ADD_EXPENSE, but that's okay
 				} else {
 					dispatch({ type: "ADD_EXPENSE", payload: expense });
 					saveRoomToLocalStorage(room.id, {
