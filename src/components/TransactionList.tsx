@@ -2,7 +2,6 @@ import {
 	ArrowLeftRight,
 	Receipt,
 	ImageIcon,
-	X,
 	Users,
 	User,
 	ChevronRight,
@@ -22,6 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ExpenseDetailPanel } from "@/components/ExpenseDetailPanel";
 import { AdjustmentDetailPanel } from "@/components/AdjustmentDetailPanel";
+import { PhotoCarouselLightbox } from "@/components/PhotoCarousel";
 import { useEffect, useState, useMemo } from "react";
 import { usePagination, Paginator } from "./Paginator";
 
@@ -38,47 +38,6 @@ function txDate(item: TransactionItem): string {
 }
 function txCreatedAt(item: TransactionItem): string {
 	return item.kind === "expense" ? item.data.createdAt : item.data.createdAt;
-}
-
-// ─── Lightbox ─────────────────────────────────────────────────────────────────
-
-function Lightbox({
-	src,
-	alt,
-	onClose,
-}: {
-	src: string;
-	alt: string;
-	onClose: () => void;
-}) {
-	useEffect(() => {
-		const handler = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", handler);
-		return () => window.removeEventListener("keydown", handler);
-	}, [onClose]);
-
-	return (
-		<div
-			className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-			onClick={onClose}
-		>
-			<button
-				className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-				onClick={onClose}
-				aria-label="Close"
-			>
-				<X className="size-5" />
-			</button>
-			<img
-				src={src}
-				alt={alt}
-				className="max-w-full max-h-[90vh] rounded-xl object-contain shadow-2xl"
-				onClick={(e) => e.stopPropagation()}
-			/>
-		</div>
-	);
 }
 
 // ─── Receipt thumbnail ────────────────────────────────────────────────────────
@@ -123,13 +82,11 @@ function ReceiptThumb({
 				</span>
 				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
 			</button>
-			{open && (
-				<Lightbox
-					src={url}
-					alt={`Receipt: ${description}`}
-					onClose={() => setOpen(false)}
-				/>
-			)}
+			<PhotoCarouselLightbox
+				images={[{ url, alt: `Receipt: ${description}` }]}
+				open={open}
+				onClose={() => setOpen(false)}
+			/>
 		</>
 	);
 }
@@ -169,11 +126,10 @@ function ExpenseRow({ expense, members, currency, onClick }: ExpenseRowProps) {
 			aria-label={`View details for ${expense.description}`}
 		>
 			{/* Receipt thumbnail or icon */}
-			{expense.receiptUrl ? expense.receiptUrl.map(url =>
-				<ReceiptThumb
-					url={url}
-					description={expense.description}
-				/>
+			{expense.receiptUrl ? (
+				expense.receiptUrl.map((url) => (
+					<ReceiptThumb url={url} description={expense.description} />
+				))
 			) : (
 				<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
 					<Receipt className="size-4" />
@@ -373,8 +329,9 @@ export function TransactionList() {
 	);
 	const [expenseDetailOpen, setExpenseDetailOpen] = useState(false);
 
-	const [selectedAdjustmentId, setSelectedAdjustmentId] =
-		useState<string | null>(null);
+	const [selectedAdjustmentId, setSelectedAdjustmentId] = useState<
+		string | null
+	>(null);
 	const [adjustmentDetailOpen, setAdjustmentDetailOpen] = useState(false);
 
 	const handleExpenseClick = (expense: Expense) => {

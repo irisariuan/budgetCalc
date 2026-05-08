@@ -5,11 +5,9 @@ import {
 	EyeOff,
 	Users,
 	RefreshCw,
-	LogOut,
 	Trash2,
 	Delete,
-	UserMinus,
-	Crown,
+	Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -51,6 +49,8 @@ export function RoomSettings() {
 	const [inviteOpen, setInviteOpen] = useState(false);
 	if (!room) return null;
 
+	const isAdmin = userRole === "admin";
+
 	const isDirty =
 		name.trim() !== room.name ||
 		listed !== (room.listed ?? true) ||
@@ -83,6 +83,17 @@ export function RoomSettings() {
 
 	return (
 		<div className="flex flex-col gap-4">
+			{/* ── Non-admin notice ──────────────────────────────────────────── */}
+			{!isAdmin && (
+				<Card className="border-amber-200/70 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/20">
+					<CardContent className="flex items-center gap-2.5 py-3 px-4">
+						<Lock className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+						<p className="text-sm text-amber-800 dark:text-amber-300">
+							Only room admins can modify these settings.
+						</p>
+					</CardContent>
+				</Card>
+			)}
 			{/* ── Room name ──────────────────────────────────────────────────── */}
 			<Card>
 				<CardHeader>
@@ -100,6 +111,7 @@ export function RoomSettings() {
 							onChange={(e) => setName(e.target.value)}
 							placeholder="e.g. Tokyo Trip 2025"
 							maxLength={80}
+							disabled={!isAdmin}
 						/>
 					</div>
 				</CardContent>
@@ -119,6 +131,7 @@ export function RoomSettings() {
 					<button
 						type="button"
 						onClick={() => setListed((v) => !v)}
+						disabled={!isAdmin}
 						className={cn(
 							"flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors",
 							listed
@@ -178,6 +191,7 @@ export function RoomSettings() {
 					<button
 						type="button"
 						onClick={() => setInviteOnly((v) => !v)}
+						disabled={!isAdmin}
 						className={cn(
 							"flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors",
 							inviteOnly
@@ -227,44 +241,47 @@ export function RoomSettings() {
 			</Card>
 
 			{/* ── Invite Code ──────────────────────────────────────────────── */}
-			<Card>
-				<CardHeader>
-					<CardTitle>Invite Code</CardTitle>
-					<CardDescription>
-						Share this code so others can join your room via link.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="flex items-center gap-2">
-						<div className="flex-1 rounded-lg border border-border bg-muted/50 px-4 py-3 font-mono text-center text-lg tracking-widest">
-							{inviteCode || "—"}
-						</div>
-						<CopyButton
-							text={inviteCode}
-							successMessage="Invite code copied"
-							ariaLabel="Copy invite code"
-							disabled={!inviteCode}
-						/>
-						<Button
-							size="icon"
-							variant="outline"
-							onClick={handleRegenerate}
-							disabled={saving}
-							title="Regenerate code"
-						>
-							<RefreshCw
-								className={cn(
-									"size-4",
-									saving && "animate-spin",
-								)}
+			{inviteOnly && (
+				<Card>
+					<CardHeader>
+						<CardTitle>Invite Code</CardTitle>
+						<CardDescription>
+							Share this code so others can join your room via
+							link.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<div className="flex items-center gap-2">
+							<div className="flex-1 rounded-lg border border-border bg-muted/50 px-4 py-3 font-mono text-center text-lg tracking-widest">
+								{inviteCode || "—"}
+							</div>
+							<CopyButton
+								text={inviteCode}
+								successMessage="Invite code copied"
+								ariaLabel="Copy invite code"
+								disabled={!inviteCode}
 							/>
-						</Button>
-					</div>
-				</CardContent>
-			</Card>
+							<Button
+								size="icon"
+								variant="outline"
+								onClick={handleRegenerate}
+								disabled={saving || !isAdmin}
+								title="Regenerate code"
+							>
+								<RefreshCw
+									className={cn(
+										"size-4",
+										saving && "animate-spin",
+									)}
+								/>
+							</Button>
+						</div>
+					</CardContent>
+				</Card>
+			)}
 
 			{/* ── Members ──────────────────────────────────────────────────── */}
-			{!room.listed && <MemberDisplay />}
+			<MemberDisplay />
 
 			{/* ── Invite Panel Button ──────────────────────────────────────── */}
 			<Button
@@ -346,7 +363,7 @@ export function RoomSettings() {
 			{/* ── Save ───────────────────────────────────────────────────────── */}
 			<Button
 				onClick={handleSave}
-				disabled={!isDirty || saving || !name.trim()}
+				disabled={!isDirty || saving || !name.trim() || !isAdmin}
 				className="w-full"
 				size="lg"
 			>

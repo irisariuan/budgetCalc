@@ -10,6 +10,7 @@ import { TransactionList } from "@/components/TransactionList";
 import { HotBar } from "@/components/HotBar";
 import { UserAvatarButton } from "@/components/UserAvatarButton";
 import { UserSettingsPage } from "@/components/UserSettingsPage";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { isOnline } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -103,6 +104,8 @@ function AppInner() {
 							<Settings className="size-4" />
 							<span className="sr-only">Room Settings</span>
 						</Button>
+
+						<ThemeToggle />
 
 						{/* User avatar + settings */}
 						{user && (

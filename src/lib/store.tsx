@@ -135,6 +135,13 @@ interface StoreActions {
 	kickParticipant: (userId: string) => Promise<void>;
 	/** Update the current user's display name in every room they belong to. */
 	updateNickname: (nickname: string) => Promise<void>;
+	/** Set a room participant's role (admin only). Returns error key on failure. */
+	setMemberRole: (
+		userId: string,
+		role: "admin" | "member",
+	) => Promise<
+		"ok" | "last_admin" | "cannot_change_own_role" | "not_admin" | "error"
+	>;
 }
 
 interface StoreContextValue {
@@ -455,7 +462,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					});
 				},
 			)
-			// ── room_members ──────────────────────────────────────────────────────────
+			// ── room_members ──────────────────────────────────────────────────────────────────
 			.on(
 				"postgres_changes",
 				{
@@ -467,6 +474,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				(payload) => {
 					dispatch({
 						type: "ADD_ROOM_PARTICIPANT",
+						payload: mapRoomParticipant(
+							payload.new as DbRoomMember,
+						),
+					});
+				},
+			)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "room_members",
+					filter: `room_id=eq.${roomId}`,
+				},
+				(payload) => {
+					dispatch({
+						type: "UPDATE_ROOM_PARTICIPANT",
 						payload: mapRoomParticipant(
 							payload.new as DbRoomMember,
 						),
@@ -1738,6 +1762,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						payload: { ...participant, displayName: nickname },
 					});
 				}
+			},
+			// ── setMemberRole ─────────────────────────────────────────────────────
+			setMemberRole: async (userId, role) => {
+				const { room, roomParticipants } = stateRef.current;
+				if (!room || !supabase) return "error";
+
+				const { data, error } = await supabase.rpc("set_member_role", {
+					p_room_id: room.id,
+					p_target_user_id: userId,
+					p_role: role,
+				});
+
+				if (error) {
+					dispatch({ type: "SET_ERROR", payload: error.message });
+					return "error";
+				}
+
+				if (!data?.success) {
+					const key = data?.error ?? "error";
+					if (
+						key === "last_admin" ||
+						key === "cannot_change_own_role" ||
+						key === "not_admin"
+					) {
+						return key;
+					}
+					return "error";
+				}
+
+				// Optimistically update local state
+				const participant = roomParticipants.find(
+					(p) => p.userId === userId,
+				);
+				if (participant) {
+					dispatch({
+						type: "UPDATE_ROOM_PARTICIPANT",
+						payload: { ...participant, role },
+					});
+				}
+				return "ok";
 			},
 		}),
 		// Both callbacks are stable (useCallback with [] deps) so this memo only

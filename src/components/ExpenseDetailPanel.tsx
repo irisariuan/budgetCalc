@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/chart";
 import { useEffect, useMemo, useState } from "react";
 import ReceiptEditor, { type Receipt } from "./ReceiptEditor";
+import { ReceiptGallery } from "./PhotoCarousel";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -367,10 +368,11 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 				source: expense.source,
 				paidById: expense.paidById,
 				splitAmong: expense.splitAmong,
-				receipts: expense.receiptUrl?.map((url) => ({
-					id: crypto.randomUUID(), // Generate new UUID for copied receipts
-					url
-				})) ?? [],
+				receipts:
+					expense.receiptUrl?.map((url) => ({
+						id: crypto.randomUUID(), // Generate new UUID for copied receipts
+						url,
+					})) ?? [],
 			});
 			onClose();
 			toast.success("Expense duplicated");
@@ -524,22 +526,7 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 								</span>
 							)}
 						</span>
-						<div
-							className={`grid gap-2 ${
-								expense.receiptUrl.length === 1
-									? "grid-cols-1"
-									: "grid-cols-2"
-							}`}
-						>
-							{expense.receiptUrl.map((url, i) => (
-								<img
-									key={url}
-									src={url}
-									alt={`Receipt ${i + 1}`}
-									className="w-full rounded-xl border border-border object-cover"
-								/>
-							))}
-						</div>
+						<ReceiptGallery urls={expense.receiptUrl} />
 					</div>
 				</>
 			)}
@@ -608,10 +595,12 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 		setSource(expense.source);
 		setPaidById(expense.paidById ?? "");
 		setSplitAmong(expense.splitAmong);
-		setReceipts(expense.receiptUrl?.map((url) => ({
-			id: crypto.randomUUID(), // Generate UUID for existing receipts
-			url
-		})) || []);
+		setReceipts(
+			expense.receiptUrl?.map((url) => ({
+				id: crypto.randomUUID(), // Generate UUID for existing receipts
+				url,
+			})) || [],
+		);
 		setErrors({});
 	}, [expense.id]);
 

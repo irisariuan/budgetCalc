@@ -110,22 +110,22 @@ export function HotBar() {
 					{/* ── Action buttons (center-right) ── */}
 					<div className="flex items-center gap-1.5 shrink-0">
 						<Button
-							size="sm"
+							size="icon-sm"
 							variant="outline"
 							onClick={() => setBudgetOpen(true)}
-							className="gap-1.5"
+							className="lg:px-2 gap-1.5 min-w-fit"
 						>
 							<PiggyBank className="size-3.5" />
-							<span className="hidden xs:inline">Add Budget</span>
+							<span className="hidden lg:inline">Add Budget</span>
 						</Button>
 
 						<Button
-							size="sm"
+							size="icon-sm"
 							onClick={() => setExpenseOpen(true)}
-							className="gap-1.5"
+							className="lg:px-2 gap-1.5 min-w-fit"
 						>
 							<Plus className="size-3.5" />
-							<span className="hidden xs:inline">
+							<span className="hidden lg:inline">
 								Add Expense
 							</span>
 						</Button>
@@ -136,11 +136,11 @@ export function HotBar() {
 						variant="ghost"
 						size="icon-sm"
 						onClick={() => actions.leaveRoom()}
-						className="shrink-0 text-muted-foreground hover:text-destructive"
+						className="shrink-0 text-muted-foreground hover:text-destructive min-w-fit lg:p-3 gap-2"
 						title="Leave room"
 					>
-						<LogOut className="size-4" />
-						<span className="sr-only">Leave room</span>
+						<LogOut className="size-3.5" />
+						<span className="hidden lg:inline">Leave room</span>
 					</Button>
 				</div>
 			</div>

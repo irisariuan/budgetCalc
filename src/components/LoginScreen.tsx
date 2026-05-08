@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PlaneTakeoff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useStore } from "@/lib/store";
 import { Turnstile } from "react-turnstile";
 
@@ -76,6 +77,9 @@ export function LoginScreen() {
 
 	return (
 		<div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-12">
+			<div className="fixed top-3 right-3">
+				<ThemeToggle size="icon" />
+			</div>
 			{/* ── Hero ── */}
 			<div className="mb-10 flex flex-col items-center gap-3 text-center">
 				<div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">

@@ -12,6 +12,24 @@ import "../styles/global.css";
 		<title>Budget Calculator</title>
 	</head>
 	<body>
+		<!--
+			Run synchronously before first paint so the correct colour-scheme
+			is applied without a flash. Must be is:inline (not bundled) so it
+			executes before any React island hydrates.
+		-->
+		<script is:inline>
+			(function () {
+				try {
+					const stored = localStorage.getItem("theme");
+					const prefersDark = window.matchMedia(
+						"(prefers-color-scheme: dark)",
+					).matches;
+					if (stored === "dark" || (!stored && prefersDark)) {
+						document.documentElement.classList.add("dark");
+					}
+				} catch {}
+			})();
+		</script>
 		<slot />
 	</body>
 </html>

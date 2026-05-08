@@ -86,7 +86,7 @@ export type Database = {
 					joined_at?: string;
 					display_name?: string | null;
 				};
-				Update: Partial<Pick<DbRoomMember, "role" | "display_name">>;
+				Update: Partial<Pick<DbRoomMember, "display_name">>;
 				Relationships: [];
 			};
 			members: {
@@ -126,6 +126,14 @@ export type Database = {
 		};
 		Views: Record<string, never>;
 		Functions: {
+			set_member_role: {
+				Args: {
+					p_room_id: string;
+					p_target_user_id: string;
+					p_role: "admin" | "member";
+				};
+				Returns: { success: boolean; error?: string };
+			};
 			join_room: {
 				Args: { p_room_id?: string; p_invite_code?: string };
 				Returns: { found: boolean; error?: string; room_id?: string };

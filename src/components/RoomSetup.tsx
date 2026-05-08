@@ -8,6 +8,7 @@ import {
 	LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,6 +29,7 @@ import { useStore } from "@/lib/store";
 import { useEffect, useState, type ChangeEvent, type SubmitEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Room } from "@/lib/types";
+import { Badge } from "./ui/badge";
 
 const CURRENCIES = [
 	{ code: "USD", label: "USD – US Dollar" },
@@ -198,21 +200,25 @@ export function RoomSetup() {
 	return (
 		<div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-12">
 			{/* ── Signed-in user bar ── */}
-			{state.user && (
-				<div className="fixed top-3 right-3 flex items-center gap-2 rounded-full border border-border/60 bg-background/80 backdrop-blur-md px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-					<span className="max-w-35 truncate">
-						{state.user.fullName ?? state.user.email ?? "Guest"}
-					</span>
-					<button
-						onClick={() => actions.signOut()}
-						className="flex items-center gap-1 hover:text-foreground transition-colors"
-						title="Sign out"
-					>
-						<LogOut className="size-3" />
-						Sign out
-					</button>
-				</div>
-			)}
+			{/* ── Fixed top-right bar: user info (if signed in) + theme toggle ── */}
+			<div className="fixed top-3 right-3 flex items-center gap-2">
+				{state.user && (
+					<div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/80 backdrop-blur-md px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+						<span className="max-w-35 truncate">
+							{state.user.fullName ?? state.user.email ?? "Guest"}
+						</span>
+						<button
+							onClick={() => actions.signOut()}
+							className="flex items-center gap-1 hover:text-foreground transition-colors"
+							title="Sign out"
+						>
+							<LogOut className="size-3" />
+							Sign out
+						</button>
+					</div>
+				)}
+				<ThemeToggle size="icon" />
+			</div>
 			{/* ── Hero ── */}
 			<div className="mb-10 flex flex-col items-center gap-3 text-center">
 				<div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
@@ -395,16 +401,24 @@ export function RoomSetup() {
 												joinRoomById(room.id);
 											}}
 										>
-											<span className="truncate">
-												{room.name}
+											<div className="truncate">
+												<span>{room.name}</span>
 												{rooms.joinedIds.has(
 													room.id,
 												) && (
-													<span className="ml-2 inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+													<Badge className="ml-2 bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-200">
 														Joined
-													</span>
+													</Badge>
 												)}
-											</span>
+												{room.listed && (
+													<Badge
+														className="ml-2"
+														variant="outline"
+													>
+														Public
+													</Badge>
+												)}
+											</div>
 											<span className="text-muted-foreground">
 												{room.currency}
 											</span>
