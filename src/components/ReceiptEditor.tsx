@@ -2,6 +2,7 @@
 
 import { X, ImagePlus, AlertCircle } from "lucide-react";
 import { useRef, useState } from "react";
+import Compressor from "compressorjs";
 
 const MAX_FILE = 10;
 const MAX_FILE_SIZE_MB = 5;
@@ -35,7 +36,31 @@ export default function ReceiptEditor({
 		return null;
 	};
 
-	const handleAdd = (f: File) => {
+	const compressImage = (file: File): Promise<File> => {
+		return new Promise((resolve, reject) => {
+			new Compressor(file, {
+				quality: 0.8,
+				maxWidth: 1920,
+				maxHeight: 1920,
+				mimeType: "image/jpeg",
+				success(result) {
+					// Convert Blob to File
+					const compressedFile = new File([result], file.name, {
+						type: "image/jpeg",
+						lastModified: Date.now(),
+					});
+					resolve(compressedFile);
+				},
+				error(err) {
+					console.error("Compression failed:", err.message);
+					// If compression fails, use original file
+					resolve(file);
+				},
+			});
+		});
+	};
+
+	const handleAdd = async (f: File) => {
 		setError(null);
 		const err = validate(f);
 		if (err) {
@@ -46,10 +71,13 @@ export default function ReceiptEditor({
 			setError(`You can only upload up to ${MAX_FILE} receipts.`);
 			return;
 		}
-		onChange([...receipts, { file: f, url: URL.createObjectURL(f) }]);
+
+		// Compress the image
+		const compressedFile = await compressImage(f);
+		onChange([...receipts, { file: compressedFile, url: URL.createObjectURL(compressedFile) }]);
 	};
 
-	const handleReplace = (f: File, index: number) => {
+	const handleReplace = async (f: File, index: number) => {
 		setError(null);
 		const err = validate(f);
 		if (err) {
@@ -59,7 +87,10 @@ export default function ReceiptEditor({
 		const updated = [...receipts];
 		const old = updated[index];
 		if (old?.url.startsWith("blob:")) URL.revokeObjectURL(old.url);
-		updated[index] = { file: f, url: URL.createObjectURL(f) };
+
+		// Compress the image
+		const compressedFile = await compressImage(f);
+		updated[index] = { file: compressedFile, url: URL.createObjectURL(compressedFile) };
 		onChange(updated);
 	};
 
