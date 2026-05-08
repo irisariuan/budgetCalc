@@ -23,7 +23,18 @@ function todayStr(): string {
 
 // ─── Granularity ──────────────────────────────────────────────────────────────
 
-export type Granularity = "day" | "week" | "month";
+export type Granularity = "day" | "week" | "month" | "daily" | "custom";
+
+export interface DateRange {
+	start: string; // YYYY-MM-DD
+	end: string; // YYYY-MM-DD
+}
+
+export interface GranularityConfig {
+	type: Granularity;
+	dailyDate?: string; // YYYY-MM-DD for "daily" type
+	customRange?: DateRange; // date range for "custom" type
+}
 
 /** Extract the YYYY-MM-DD part from either "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm". */
 export function toDateOnly(d: string): string {
@@ -51,11 +62,18 @@ export function monthBucket(dateStr: string): string {
  * "day"   → "YYYY-MM-DD"
  * "week"  → Monday of that week as "YYYY-MM-DD"
  * "month" → "YYYY-MM-01"
+ * "daily" → "YYYY-MM-DDTHH:mm" (keeps full timestamp)
+ * "custom" → "YYYY-MM-DD" (groups by day within range)
  */
 export function getBucketKey(dateStr: string, gran: Granularity): string {
+	if (gran === "daily") {
+		// Keep full timestamp for daily view
+		return dateStr.includes("T") ? dateStr.slice(0, 16) : `${dateStr}T00:00`;
+	}
 	const d = toDateOnly(dateStr);
 	if (gran === "week") return weekBucket(d);
 	if (gran === "month") return monthBucket(d);
+	// "day" and "custom" both group by date
 	return d;
 }
 
@@ -64,9 +82,26 @@ export function getBucketKey(dateStr: string, gran: Granularity): string {
  * "day"   → "Jan 15"
  * "week"  → "Jan 15 – 21"   (Mon → Sun of that week)
  * "month" → "Jan 2024"
+ * "daily" → "Jan 15, 3:45 PM"  (with time)
+ * "custom" → "Jan 15"
  */
 export function formatBucketLabel(key: string, gran: Granularity): string {
-	const d = new Date(`${key}T00:00:00Z`);
+	if (gran === "daily") {
+		// Parse timestamp and format with time
+		const hasTime = key.includes("T");
+		if (hasTime) {
+			const dt = new Date(`${key}:00`); // Add seconds for parsing
+			return dt.toLocaleString("en-US", {
+				month: "short",
+				day: "numeric",
+				hour: "numeric",
+				minute: "2-digit",
+				hour12: true,
+			});
+		}
+	}
+
+	const d = new Date(`${key.slice(0, 10)}T00:00:00Z`);
 	if (gran === "month") {
 		return d.toLocaleDateString("en-US", {
 			month: "short",
@@ -88,12 +123,36 @@ export function formatBucketLabel(key: string, gran: Granularity): string {
 		});
 		return `${startStr} – ${endStr}`;
 	}
-	// day
+	// day or custom
 	return d.toLocaleDateString("en-US", {
 		month: "short",
 		day: "numeric",
 		timeZone: "UTC",
 	});
+}
+
+/**
+ * Filter function for granularity-based date filtering.
+ * Returns true if the date should be included based on granularity config.
+ */
+export function shouldIncludeDate(
+	dateStr: string,
+	granularity: Granularity,
+	dailyDate?: string,
+	customRange?: DateRange,
+): boolean {
+	if (granularity === "daily" && dailyDate) {
+		// Only include transactions on the specific date
+		const d = toDateOnly(dateStr);
+		return d === dailyDate;
+	}
+	if (granularity === "custom" && customRange) {
+		// Only include transactions within the date range
+		const d = toDateOnly(dateStr);
+		return d >= customRange.start && d <= customRange.end;
+	}
+	// For day, week, month: include all dates
+	return true;
 }
 
 // ─── Budget chart ─────────────────────────────────────────────────────────────
@@ -110,11 +169,16 @@ export function generateBudgetChartData(
 	budgetAdditions: BudgetAddition[],
 	expenses: Expense[],
 	granularity: Granularity = "day",
+	dailyDate?: string,
+	customRange?: DateRange,
 ): BudgetDataPoint[] {
 	// Accumulate daily deltas: date → { added, spent }
 	const dailyMap = new Map<string, { added: number; spent: number }>();
 
 	for (const addition of budgetAdditions) {
+		if (!shouldIncludeDate(addition.date, granularity, dailyDate, customRange)) {
+			continue;
+		}
 		const entry = dailyMap.get(addition.date) ?? { added: 0, spent: 0 };
 		entry.added += addition.amount;
 		dailyMap.set(addition.date, entry);
@@ -122,6 +186,9 @@ export function generateBudgetChartData(
 
 	for (const expense of expenses) {
 		if (expense.source !== "group") continue;
+		if (!shouldIncludeDate(expense.date, granularity, dailyDate, customRange)) {
+			continue;
+		}
 		const entry = dailyMap.get(expense.date) ?? { added: 0, spent: 0 };
 		entry.spent += expense.amount;
 		dailyMap.set(expense.date, entry);
@@ -189,8 +256,19 @@ export function generateBalanceChartData(
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
 	granularity: Granularity = "day",
+	dailyDate?: string,
+	customRange?: DateRange,
 ): BalanceDataPoint[] {
-	const personalExpenses = expenses.filter((e) => e.source === "personal");
+	const personalExpenses = expenses.filter(
+		(e) =>
+			e.source === "personal" &&
+			shouldIncludeDate(e.date, granularity, dailyDate, customRange),
+	);
+
+	// Filter adjustments
+	const filteredAdjustments = adjustments.filter((adj) =>
+		shouldIncludeDate(adj.date, granularity, dailyDate, customRange),
+	);
 
 	// Zero anchor – used when there are no events at all.
 	const buildZeroPoint = (date: string): BalanceDataPoint => {
@@ -199,7 +277,7 @@ export function generateBalanceChartData(
 		return point;
 	};
 
-	if (personalExpenses.length === 0 && adjustments.length === 0) {
+	if (personalExpenses.length === 0 && filteredAdjustments.length === 0) {
 		return [buildZeroPoint(todayStr())];
 	}
 
@@ -213,7 +291,7 @@ export function generateBalanceChartData(
 
 	// Group adjustments by date.
 	const dailyAdjMap = new Map<string, BalanceAdjustment[]>();
-	for (const adj of adjustments) {
+	for (const adj of filteredAdjustments) {
 		const list = dailyAdjMap.get(adj.date) ?? [];
 		list.push(adj);
 		dailyAdjMap.set(adj.date, list);
@@ -416,12 +494,16 @@ export function generateRealBalanceChartData(
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
 	granularity: Granularity = "day",
+	dailyDate?: string,
+	customRange?: DateRange,
 ): BalanceDataPoint[] {
 	const raw = generateBalanceChartData(
 		members,
 		expenses,
 		adjustments,
 		granularity,
+		dailyDate,
+		customRange,
 	);
 	return raw.map((point) => {
 		const negated: BalanceDataPoint = { date: point.date };
