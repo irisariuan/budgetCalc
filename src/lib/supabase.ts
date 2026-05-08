@@ -179,11 +179,13 @@ const RECEIPTS_BUCKET = "receipts";
 /**
  * Uploads receipt images to Supabase Storage.
  * Returns the public URL, or null if offline / upload failed.
+ * @param startIndex - Starting index for filename generation (to avoid collisions with existing files)
  */
 export async function uploadReceiptFile(
 	roomId: string,
 	expenseId: string,
 	files: File[],
+	startIndex: number = 0,
 ): Promise<string[] | null> {
 	if (!supabase) return null;
 	const urls = [];
@@ -191,7 +193,8 @@ export async function uploadReceiptFile(
 		const file = files[i];
 		const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
 		// Use index to ensure unique filenames for multiple receipts
-		const path = `${roomId}/${expenseId}_${i}.${ext}`;
+		const fileIndex = startIndex + i;
+		const path = `${roomId}/${expenseId}_${fileIndex}.${ext}`;
 
 		const { error } = await supabase.storage
 			.from(RECEIPTS_BUCKET)
