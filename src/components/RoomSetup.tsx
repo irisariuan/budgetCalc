@@ -12,6 +12,12 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+	InputOTP,
+	InputOTPGroup,
+	InputOTPSlot,
+	InputOTPSeparator,
+} from "@/components/ui/input-otp";
+import {
 	Card,
 	CardContent,
 	CardHeader,
@@ -26,7 +32,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
-import { useEffect, useState, type ChangeEvent, type SubmitEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Room } from "@/lib/types";
 import { Badge } from "./ui/badge";
@@ -184,12 +190,6 @@ export function RoomSetup() {
 		}
 	}
 
-	const handleRoomCodeChange = (e: ChangeEvent<HTMLInputElement>) => {
-		// Only allow alphanumeric, uppercase
-		const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-		if (val.length <= 6) setRoomCode(val);
-	};
-
 	const handleJoin = async (e: SubmitEvent) => {
 		e.preventDefault();
 		await joinRoomById(roomCode);
@@ -340,16 +340,49 @@ export function RoomSetup() {
 						<form onSubmit={handleJoin} className="space-y-4">
 							<div className="space-y-1.5">
 								<Label htmlFor="room-code">Room code</Label>
-								<Input
+								<InputOTP
 									id="room-code"
-									placeholder="ABC123"
-									value={roomCode}
-									onChange={handleRoomCodeChange}
-									disabled={isBusy}
-									autoComplete="off"
-									className="font-mono tracking-widest uppercase"
 									maxLength={6}
-								/>
+									value={roomCode}
+									onChange={(val) =>
+										setRoomCode(
+											val
+												.toUpperCase()
+												.replace(/[^A-Z0-9]/g, ""),
+										)
+									}
+									disabled={isBusy}
+								>
+									<InputOTPGroup>
+										<InputOTPSlot
+											index={0}
+											className="size-10 text-base font-mono"
+										/>
+										<InputOTPSlot
+											index={1}
+											className="size-10 text-base font-mono"
+										/>
+										<InputOTPSlot
+											index={2}
+											className="size-10 text-base font-mono"
+										/>
+									</InputOTPGroup>
+									<InputOTPSeparator />
+									<InputOTPGroup>
+										<InputOTPSlot
+											index={3}
+											className="size-10 text-base font-mono"
+										/>
+										<InputOTPSlot
+											index={4}
+											className="size-10 text-base font-mono"
+										/>
+										<InputOTPSlot
+											index={5}
+											className="size-10 text-base font-mono"
+										/>
+									</InputOTPGroup>
+								</InputOTP>
 							</div>
 
 							{joinError && (
