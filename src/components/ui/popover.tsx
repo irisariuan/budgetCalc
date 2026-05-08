@@ -22,41 +22,56 @@ function PopoverContent({
 }: ComponentProps<typeof PopoverPrimitive.Content>) {
 	const measuredRef = useCallback((node: HTMLDivElement | null) => {
 		if (node !== null) {
-			// Define the resizing logic
 			const updatePosition = () => {
-				const style = getComputedStyle(node);
-				// children's total height accumulated
-				const heightRequire = node.childNodes
-					.values()
-					.reduce((acc, child) => {
-						if (child instanceof HTMLElement) {
-							const marginTop = parseFloat(
-								getComputedStyle(child).marginTop,
-							);
-							const marginBottom = parseFloat(
-								getComputedStyle(child).marginBottom,
-							);
-							return (
-								acc +
-								child.getBoundingClientRect().height +
-								marginTop +
-								marginBottom
-							);
-						}
-						return acc;
-					}, 0);
-				const heightLeft = parseFloat(style.maxHeight);
+				// 1. Calculate the available space using Visual Viewport
+				// Defaults to window.innerHeight if visualViewport isn't supported
+				const viewportHeight =
+					window.visualViewport?.height ?? window.innerHeight;
+				const nodeRect = node.getBoundingClientRect();
+
+				// 2. Set dynamic maxHeight relative to the visual viewport
+				// We use the node's current top position relative to the viewport
+				const dynamicMaxHeight = viewportHeight - nodeRect.top - 16;
+				node.style.maxHeight = `${dynamicMaxHeight}px`;
+
+				// 3. Calculate children's required height
+				const heightRequire = Array.from(node.children).reduce(
+					(acc, child) => {
+						const childStyle = getComputedStyle(child);
+						const margins =
+							parseFloat(childStyle.marginTop) +
+							parseFloat(childStyle.marginBottom);
+						return (
+							acc + child.getBoundingClientRect().height + margins
+						);
+					},
+					0,
+				);
+
+				// 4. Adjust position if content overflows maxHeight
+				const heightLeft = dynamicMaxHeight;
 				const diff = heightRequire - heightLeft;
 				node.style.bottom = diff > 0 ? `${diff}px` : "0";
-				node.style.maxHeight = `calc(100vh - ${node.getBoundingClientRect().top}px - 16px)`;
 			};
 
-			// Run ONCE immediately on mount
-			// We use requestAnimationFrame to ensure the browser has
-			// painted the content and heights are calculable.
-			requestAnimationFrame(() => {
-				updatePosition();
-			});
+			// Initialize
+			requestAnimationFrame(updatePosition);
+
+			// Handle Safari/Mobile Viewport Resizing (URL bar, Keyboard)
+			window.visualViewport?.addEventListener("resize", updatePosition);
+			window.visualViewport?.addEventListener("scroll", updatePosition);
+
+			// Cleanup function for when node changes or unmounts
+			return () => {
+				window.visualViewport?.removeEventListener(
+					"resize",
+					updatePosition,
+				);
+				window.visualViewport?.removeEventListener(
+					"scroll",
+					updatePosition,
+				);
+			};
 		}
 	}, []);
 	return (
