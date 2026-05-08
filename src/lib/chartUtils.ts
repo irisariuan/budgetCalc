@@ -23,11 +23,20 @@ function todayStr(): string {
 
 // ─── Granularity ──────────────────────────────────────────────────────────────
 
-export type Granularity = "day" | "week" | "month";
+export type Granularity = "day" | "week" | "month" | "daily" | "custom";
 
 /** Extract the YYYY-MM-DD part from either "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm". */
 export function toDateOnly(d: string): string {
 	return d.slice(0, 10);
+}
+
+/**
+ * Extract the full minute-resolution timestamp "YYYY-MM-DDTHH:mm" from either
+ * "YYYY-MM-DD" (treated as T00:00) or a longer "YYYY-MM-DDTHH:mm[:ss]" string.
+ */
+export function toMinuteTs(d: string): string {
+	if (d.includes("T")) return d.slice(0, 16);
+	return `${d}T00:00`;
 }
 
 /**
@@ -48,11 +57,14 @@ export function monthBucket(dateStr: string): string {
 
 /**
  * Map a date string to its bucket key for the given granularity.
- * "day"   → "YYYY-MM-DD"
- * "week"  → Monday of that week as "YYYY-MM-DD"
- * "month" → "YYYY-MM-01"
+ * "day"    → "YYYY-MM-DD"
+ * "week"   → Monday of that week as "YYYY-MM-DD"
+ * "month"  → "YYYY-MM-01"
+ * "daily"  → "YYYY-MM-DDTHH:mm" (per-transaction timestamp)
+ * "custom" → "YYYY-MM-DD" (same as "day")
  */
 export function getBucketKey(dateStr: string, gran: Granularity): string {
+	if (gran === "daily") return toMinuteTs(dateStr);
 	const d = toDateOnly(dateStr);
 	if (gran === "week") return weekBucket(d);
 	if (gran === "month") return monthBucket(d);
@@ -66,7 +78,12 @@ export function getBucketKey(dateStr: string, gran: Granularity): string {
  * "month" → "Jan 2024"
  */
 export function formatBucketLabel(key: string, gran: Granularity): string {
-	const d = new Date(`${key}T00:00:00Z`);
+	if (gran === "daily") {
+		// Key is "YYYY-MM-DDTHH:mm" – show just the time part.
+		const ts = toMinuteTs(key);
+		return ts.slice(11, 16);
+	}
+	const d = new Date(`${toDateOnly(key)}T00:00:00Z`);
 	if (gran === "month") {
 		return d.toLocaleDateString("en-US", {
 			month: "short",
@@ -110,27 +127,69 @@ export function generateBudgetChartData(
 	budgetAdditions: BudgetAddition[],
 	expenses: Expense[],
 	granularity: Granularity = "day",
+	options?: {
+		selectedDate?: string; // used when granularity === "daily" (YYYY-MM-DD)
+		rangeStart?: string; // used when granularity === "custom" (YYYY-MM-DD)
+		rangeEnd?: string; // used when granularity === "custom" (YYYY-MM-DD)
+	},
 ): BudgetDataPoint[] {
-	// Accumulate daily deltas: date → { added, spent }
+	const selectedDate = options?.selectedDate ?? todayStr();
+	const rangeStart = options?.rangeStart;
+	const rangeEnd = options?.rangeEnd;
+
+	// ── Event-level filtering (for "daily" / "custom") ──────────────────────
+	const keepAddition = (a: BudgetAddition): boolean => {
+		if (granularity === "daily") return toDateOnly(a.date) === selectedDate;
+		if (granularity === "custom" && rangeStart && rangeEnd) {
+			const d = toDateOnly(a.date);
+			return d >= rangeStart && d <= rangeEnd;
+		}
+		return true;
+	};
+	const keepExpense = (e: Expense): boolean => {
+		if (granularity === "daily") return toDateOnly(e.date) === selectedDate;
+		if (granularity === "custom" && rangeStart && rangeEnd) {
+			const d = toDateOnly(e.date);
+			return d >= rangeStart && d <= rangeEnd;
+		}
+		return true;
+	};
+
+	const isDaily = granularity === "daily";
+
+	// Accumulate deltas keyed per event-date (day for everything except
+	// "daily", which keys per full timestamp).
 	const dailyMap = new Map<string, { added: number; spent: number }>();
+	const keyOf = (rawDate: string): string =>
+		isDaily ? toMinuteTs(rawDate) : toDateOnly(rawDate);
 
 	for (const addition of budgetAdditions) {
-		const entry = dailyMap.get(addition.date) ?? { added: 0, spent: 0 };
+		if (!keepAddition(addition)) continue;
+		const k = keyOf(addition.date);
+		const entry = dailyMap.get(k) ?? { added: 0, spent: 0 };
 		entry.added += addition.amount;
-		dailyMap.set(addition.date, entry);
+		dailyMap.set(k, entry);
 	}
 
 	for (const expense of expenses) {
 		if (expense.source !== "group") continue;
-		const entry = dailyMap.get(expense.date) ?? { added: 0, spent: 0 };
+		if (!keepExpense(expense)) continue;
+		const k = keyOf(expense.date);
+		const entry = dailyMap.get(k) ?? { added: 0, spent: 0 };
 		entry.spent += expense.amount;
-		dailyMap.set(expense.date, entry);
+		dailyMap.set(k, entry);
 	}
 
 	const sortedDates = Array.from(dailyMap.keys()).sort();
 
 	if (sortedDates.length === 0) {
-		return [{ date: todayStr(), added: 0, spent: 0, remaining: 0 }];
+		const anchor =
+			granularity === "daily"
+				? `${selectedDate}T00:00`
+				: granularity === "custom" && rangeStart
+					? rangeStart
+					: todayStr();
+		return [{ date: anchor, added: 0, spent: 0, remaining: 0 }];
 	}
 
 	// ── Bucket aggregation ──────────────────────────────────────────────────
@@ -146,8 +205,16 @@ export function generateBudgetChartData(
 
 	const sortedBuckets = Array.from(bucketMap.keys()).sort();
 
+	// Zero anchor
+	const anchorDate =
+		granularity === "daily"
+			? `${selectedDate}T00:00`
+			: granularity === "custom" && rangeStart
+				? rangeStart
+				: dayBefore(sortedBuckets[0]);
+
 	const result: BudgetDataPoint[] = [
-		{ date: dayBefore(sortedBuckets[0]), added: 0, spent: 0, remaining: 0 },
+		{ date: anchorDate, added: 0, spent: 0, remaining: 0 },
 	];
 
 	let cumulativeAdded = 0;
@@ -189,8 +256,32 @@ export function generateBalanceChartData(
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
 	granularity: Granularity = "day",
+	options?: {
+		selectedDate?: string; // YYYY-MM-DD for "daily"
+		rangeStart?: string; // YYYY-MM-DD for "custom"
+		rangeEnd?: string; // YYYY-MM-DD for "custom"
+	},
 ): BalanceDataPoint[] {
-	const personalExpenses = expenses.filter((e) => e.source === "personal");
+	const selectedDate = options?.selectedDate ?? todayStr();
+	const rangeStart = options?.rangeStart;
+	const rangeEnd = options?.rangeEnd;
+
+	const isDaily = granularity === "daily";
+	const isCustom = granularity === "custom";
+
+	const inRange = (rawDate: string): boolean => {
+		if (isDaily) return toDateOnly(rawDate) === selectedDate;
+		if (isCustom && rangeStart && rangeEnd) {
+			const d = toDateOnly(rawDate);
+			return d >= rangeStart && d <= rangeEnd;
+		}
+		return true;
+	};
+
+	const personalExpenses = expenses
+		.filter((e) => e.source === "personal")
+		.filter((e) => inRange(e.date));
+	const filteredAdjustments = adjustments.filter((a) => inRange(a.date));
 
 	// Zero anchor – used when there are no events at all.
 	const buildZeroPoint = (date: string): BalanceDataPoint => {
@@ -199,34 +290,44 @@ export function generateBalanceChartData(
 		return point;
 	};
 
-	if (personalExpenses.length === 0 && adjustments.length === 0) {
-		return [buildZeroPoint(todayStr())];
+	if (personalExpenses.length === 0 && filteredAdjustments.length === 0) {
+		const emptyAnchor = isDaily
+			? `${selectedDate}T00:00`
+			: isCustom && rangeStart
+				? rangeStart
+				: todayStr();
+		return [buildZeroPoint(emptyAnchor)];
 	}
 
-	// Group personal expenses by date (YYYY-MM-DD).
+	const keyOf = (rawDate: string): string =>
+		isDaily ? toMinuteTs(rawDate) : toDateOnly(rawDate);
+
+	// Group personal expenses by per-event key.
 	const dailyExpenseMap = new Map<string, Expense[]>();
 	for (const expense of personalExpenses) {
-		const list = dailyExpenseMap.get(expense.date) ?? [];
+		const k = keyOf(expense.date);
+		const list = dailyExpenseMap.get(k) ?? [];
 		list.push(expense);
-		dailyExpenseMap.set(expense.date, list);
+		dailyExpenseMap.set(k, list);
 	}
 
-	// Group adjustments by date.
+	// Group adjustments by per-event key.
 	const dailyAdjMap = new Map<string, BalanceAdjustment[]>();
-	for (const adj of adjustments) {
-		const list = dailyAdjMap.get(adj.date) ?? [];
+	for (const adj of filteredAdjustments) {
+		const k = keyOf(adj.date);
+		const list = dailyAdjMap.get(k) ?? [];
 		list.push(adj);
-		dailyAdjMap.set(adj.date, list);
+		dailyAdjMap.set(k, list);
 	}
 
-	// Merge all event dates and sort
+	// Merge all event keys and sort
 	const allDates = Array.from(
 		new Set([...dailyExpenseMap.keys(), ...dailyAdjMap.keys()]),
 	).sort();
 
 	// ── Bucket aggregation ──────────────────────────────────────────────────
 	// Group dates into their bucket, preserving day-level maps for processing
-	const bucketDates = new Map<string, string[]>(); // bucketKey → list of dates
+	const bucketDates = new Map<string, string[]>(); // bucketKey → list of event-keys
 	for (const date of allDates) {
 		const key = getBucketKey(date, granularity);
 		const list = bucketDates.get(key) ?? [];
@@ -238,9 +339,13 @@ export function generateBalanceChartData(
 	const balances: Record<string, number> = {};
 	for (const m of members) balances[m.id] = 0;
 
-	const result: BalanceDataPoint[] = [
-		buildZeroPoint(dayBefore(sortedBuckets[0])),
-	];
+	const anchorDate = isDaily
+		? `${selectedDate}T00:00`
+		: isCustom && rangeStart
+			? rangeStart
+			: dayBefore(sortedBuckets[0]);
+
+	const result: BalanceDataPoint[] = [buildZeroPoint(anchorDate)];
 
 	for (const bucketKey of sortedBuckets) {
 		const datesInBucket = bucketDates.get(bucketKey)!;
@@ -416,12 +521,18 @@ export function generateRealBalanceChartData(
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
 	granularity: Granularity = "day",
+	options?: {
+		selectedDate?: string;
+		rangeStart?: string;
+		rangeEnd?: string;
+	},
 ): BalanceDataPoint[] {
 	const raw = generateBalanceChartData(
 		members,
 		expenses,
 		adjustments,
 		granularity,
+		options,
 	);
 	return raw.map((point) => {
 		const negated: BalanceDataPoint = { date: point.date };

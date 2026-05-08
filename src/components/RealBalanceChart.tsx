@@ -25,9 +25,9 @@ import {
 	type ChartConfig,
 } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import SettleUpPanel from "./SettleUpPanel";
+import { GranularityControls } from "@/components/GranularityControls";
 import { useMemo, useCallback, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -48,6 +48,10 @@ export function RealBalanceChart() {
 	const { state, actions } = useStore();
 	const currency = state.room?.currency ?? "USD";
 	const [granularity, setGranularity] = useState<Granularity>("day");
+	const [selectedDate, setSelectedDate] = useState<string>(() =>
+		new Date().toISOString().slice(0, 10),
+	);
+	const [range, setRange] = useState<{ from?: string; to?: string }>({});
 
 	const chartConfig = useMemo<ChartConfig>(() => {
 		const config: ChartConfig = {};
@@ -67,8 +71,21 @@ export function RealBalanceChart() {
 				state.expenses,
 				state.balanceAdjustments,
 				granularity,
+				{
+					selectedDate,
+					rangeStart: range.from,
+					rangeEnd: range.to,
+				},
 			),
-		[state.members, state.expenses, state.balanceAdjustments, granularity],
+		[
+			state.members,
+			state.expenses,
+			state.balanceAdjustments,
+			granularity,
+			selectedDate,
+			range.from,
+			range.to,
+		],
 	);
 
 	const currentBalances = useMemo(
@@ -155,23 +172,14 @@ export function RealBalanceChart() {
 			</div>
 
 			{/* Granularity toggle */}
-			<div className="flex items-center gap-1 self-end rounded-lg border border-input p-0.5">
-				{(["day", "week", "month"] as Granularity[]).map((g) => (
-					<button
-						key={g}
-						type="button"
-						onClick={() => setGranularity(g)}
-						className={cn(
-							"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-							granularity === g
-								? "bg-primary text-primary-foreground"
-								: "text-muted-foreground hover:text-foreground",
-						)}
-					>
-						{g.charAt(0).toUpperCase() + g.slice(1)}
-					</button>
-				))}
-			</div>
+			<GranularityControls
+				granularity={granularity}
+				onGranularityChange={setGranularity}
+				selectedDate={selectedDate}
+				onSelectedDateChange={setSelectedDate}
+				range={range}
+				onRangeChange={setRange}
+			/>
 
 			{/* ── Area chart ───────────────────────────────────────────────── */}
 			<ChartContainer config={chartConfig} className="min-h-60 w-full">

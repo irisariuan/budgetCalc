@@ -21,7 +21,7 @@ import {
 	type ChartConfig,
 } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { GranularityControls } from "@/components/GranularityControls";
 
 // ─── Static chart config ──────────────────────────────────────────────────────
 
@@ -48,6 +48,10 @@ export function BudgetOverviewChart() {
 	const { state } = useStore();
 	const currency = state.room?.currency ?? "USD";
 	const [granularity, setGranularity] = useState<Granularity>("day");
+	const [selectedDate, setSelectedDate] = useState<string>(() =>
+		new Date().toISOString().slice(0, 10),
+	);
+	const [range, setRange] = useState<{ from?: string; to?: string }>({});
 
 	// Unique IDs so multiple chart instances on the same page don't clash
 	const uid = useId().replace(/:/g, "");
@@ -60,8 +64,20 @@ export function BudgetOverviewChart() {
 				state.budgetAdditions,
 				state.expenses,
 				granularity,
+				{
+					selectedDate,
+					rangeStart: range.from,
+					rangeEnd: range.to,
+				},
 			),
-		[state.budgetAdditions, state.expenses, granularity],
+		[
+			state.budgetAdditions,
+			state.expenses,
+			granularity,
+			selectedDate,
+			range.from,
+			range.to,
+		],
 	);
 
 	const hasData =
@@ -120,23 +136,14 @@ export function BudgetOverviewChart() {
 			</div>
 
 			{/* Granularity toggle */}
-			<div className="flex items-center gap-1 self-end rounded-lg border border-input p-0.5">
-				{(["day", "week", "month"] as Granularity[]).map((g) => (
-					<button
-						key={g}
-						type="button"
-						onClick={() => setGranularity(g)}
-						className={cn(
-							"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-							granularity === g
-								? "bg-primary text-primary-foreground"
-								: "text-muted-foreground hover:text-foreground",
-						)}
-					>
-						{g.charAt(0).toUpperCase() + g.slice(1)}
-					</button>
-				))}
-			</div>
+			<GranularityControls
+				granularity={granularity}
+				onGranularityChange={setGranularity}
+				selectedDate={selectedDate}
+				onSelectedDateChange={setSelectedDate}
+				range={range}
+				onRangeChange={setRange}
+			/>
 
 			<ChartContainer config={chartConfig} className="min-h-55 w-full">
 				<AreaChart

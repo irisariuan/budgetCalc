@@ -24,6 +24,7 @@ import { AdjustmentDetailPanel } from "@/components/AdjustmentDetailPanel";
 import { PhotoCarouselLightbox } from "@/components/PhotoCarousel";
 import { useEffect, useState, useMemo } from "react";
 import { usePagination, Paginator } from "./Paginator";
+import { formatDateShort } from "@/lib/dateFormat";
 
 const PAGE_SIZE = 10;
 
@@ -113,10 +114,7 @@ function ExpenseRow({ expense, members, currency, onClick }: ExpenseRowProps) {
 		maximumFractionDigits: 2,
 	});
 
-	const dateLabel = new Date(`${expense.date}T00:00:00Z`).toLocaleDateString(
-		"en-US",
-		{ month: "short", day: "numeric", timeZone: "UTC" },
-	);
+	const dateLabel = formatDateShort(expense.date);
 
 	return (
 		<button
@@ -225,13 +223,7 @@ function AdjustmentRow({
 		maximumFractionDigits: 2,
 	});
 
-	const dateLabel = new Date(
-		`${adjustment.date}T00:00:00Z`,
-	).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
+	const dateLabel = formatDateShort(adjustment.date);
 
 	return (
 		<button
