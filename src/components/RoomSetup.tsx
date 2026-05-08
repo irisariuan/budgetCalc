@@ -5,6 +5,7 @@ import {
 	AlertCircle,
 	Loader2,
 	LogIn,
+	LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,8 +68,12 @@ export function RoomSetup() {
 		setIsCreating(true);
 		try {
 			await actions.createRoom(trimmed, currency);
-		} catch {
-			setCreateError("Failed to create room. Please try again.");
+		} catch (err) {
+			setCreateError(
+				err instanceof Error
+					? err.message
+					: "Failed to create room. Please try again.",
+			);
 		} finally {
 			setIsCreating(false);
 		}
@@ -84,7 +89,10 @@ export function RoomSetup() {
 	useEffect(() => {
 		if (!supabase) return;
 		(async () => {
-			const { data, error } = await supabase.from("rooms").select("*");
+			const { data, error } = await supabase
+				.from("rooms")
+				.select("*")
+				.eq("listed", true);
 			if (error) {
 				return setRooms([]);
 			}
@@ -94,6 +102,7 @@ export function RoomSetup() {
 					currency: v.currency,
 					id: v.id,
 					name: v.name,
+					listed: v.listed ?? true,
 				})),
 			);
 		})();
@@ -137,6 +146,22 @@ export function RoomSetup() {
 
 	return (
 		<div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-12">
+			{/* ── Signed-in user bar ── */}
+			{state.user && (
+				<div className="fixed top-3 right-3 flex items-center gap-2 rounded-full border border-border/60 bg-background/80 backdrop-blur-md px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+					<span className="max-w-35 truncate">
+						{state.user.fullName ?? state.user.email ?? "Guest"}
+					</span>
+					<button
+						onClick={() => actions.signOut()}
+						className="flex items-center gap-1 hover:text-foreground transition-colors"
+						title="Sign out"
+					>
+						<LogOut className="size-3" />
+						Sign out
+					</button>
+				</div>
+			)}
 			{/* ── Hero ── */}
 			<div className="mb-10 flex flex-col items-center gap-3 text-center">
 				<div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">

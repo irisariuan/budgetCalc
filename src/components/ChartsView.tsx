@@ -66,13 +66,20 @@ export function ChartsView() {
 			{/* ── Tabbed content ───────────────────────────────────────────── */}
 			<CardContent className="pt-4">
 				<Tabs defaultValue="budget">
-					<TabsList className="mb-4 w-fit" variant="line">
-						<TabsTrigger value="budget">Group Budget</TabsTrigger>
-						<TabsTrigger value="balances">
-							Member Balances
-						</TabsTrigger>
-						<TabsTrigger value="real">Cash Flow</TabsTrigger>
-					</TabsList>
+					<div className="overflow-x-auto mb-4">
+						<TabsList
+							className="w-fit min-w-full"
+							variant="line"
+						>
+							<TabsTrigger value="budget">
+								Group Budget
+							</TabsTrigger>
+							<TabsTrigger value="balances">
+								Member Balances
+							</TabsTrigger>
+							<TabsTrigger value="real">Cash Flow</TabsTrigger>
+						</TabsList>
+					</div>
 
 					<TabsContent value="budget">
 						<BudgetOverviewChart />

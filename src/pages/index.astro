@@ -1,8 +1,17 @@
 ---
 import MainLayout from "../layouts/MainLayout.astro";
 import App from "@/components/App";
+import { Toaster } from "@/components/ui/sonner";
 ---
 
 <MainLayout>
 	<App client:load />
+
+	<!--
+		Toaster is a tiny, stateless UI primitive with no store dependency.
+		- client:idle  → hydrates after the main thread is free (non-blocking)
+		- Separate island  → its own small bundle, independent of the App island
+		- Always mounted  → toasts work even before/during RoomSetup
+	-->
+	<Toaster client:idle position="bottom-center" richColors />
 </MainLayout>

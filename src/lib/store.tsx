@@ -1,4 +1,4 @@
-import React, {
+import {
 	createContext,
 	useCallback,
 	useContext,
@@ -13,15 +13,16 @@ import {
 	supabase,
 	isOnline,
 	mapRoom,
+	mapUser,
 	mapMember,
 	mapExpense,
 	mapBudgetAddition,
 	mapBalanceAdjustment,
 	uploadReceiptFile,
 	deleteReceiptFile,
-	filesToDataUrl,
 } from "@/lib/supabase";
 import type {
+	DbRoom,
 	DbMember,
 	DbExpense,
 	DbBudgetAddition,
@@ -30,6 +31,7 @@ import type {
 import type {
 	AppAction,
 	AppState,
+	AuthUser,
 	BalanceAdjustment,
 	BudgetAddition,
 	Expense,
@@ -60,6 +62,10 @@ interface StoreActions {
 	/** Returns false if the room was not found. */
 	joinRoom: (roomId: string) => Promise<boolean>;
 	leaveRoom: () => void;
+	signInWithGoogle: () => Promise<void>;
+	signInWithGitHub: () => Promise<void>;
+	signInAnonymously: (OAuthToken: string) => Promise<void>;
+	signOut: () => Promise<void>;
 	addMember: (name: string, color: string) => Promise<void>;
 	removeMember: (memberId: string) => Promise<void>;
 	updateMember: (
@@ -113,6 +119,7 @@ interface StoreActions {
 		},
 	) => Promise<void>;
 	restoreBalanceAdjustment: (adjustment: BalanceAdjustment) => Promise<void>;
+	updateRoom: (data: { name?: string; listed?: boolean }) => Promise<void>;
 }
 
 interface StoreContextValue {
@@ -186,6 +193,10 @@ const initialState: AppState = {
 	budgetAdditions: [],
 	balanceAdjustments: [],
 	error: null,
+	user: null,
+	// Start as loading so the app waits for getSession() before rendering.
+	// Set to false immediately when Supabase is unavailable.
+	authLoading: isOnline,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -197,7 +208,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_ROOM":
 			return { ...state, room: action.payload };
 		case "CLEAR_ROOM":
-			return { ...initialState, status: isOnline ? "idle" : "offline" };
+			return {
+				...initialState,
+				status: isOnline ? "idle" : "offline",
+				// Keep the user signed in when leaving a room.
+				user: state.user,
+				authLoading: false,
+			};
 		case "SET_MEMBERS":
 			return { ...state, members: action.payload };
 		case "ADD_MEMBER":
@@ -217,6 +234,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_EXPENSES":
 			return { ...state, expenses: action.payload };
 		case "ADD_EXPENSE":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (state.expenses.some((e) => e.id === action.payload.id)) {
+				return state;
+			}
 			return { ...state, expenses: [...state.expenses, action.payload] };
 		case "REMOVE_EXPENSE":
 			return {
@@ -233,6 +254,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_BUDGET_ADDITIONS":
 			return { ...state, budgetAdditions: action.payload };
 		case "ADD_BUDGET_ADDITION":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (state.budgetAdditions.some((a) => a.id === action.payload.id)) {
+				return state;
+			}
 			return {
 				...state,
 				budgetAdditions: [...state.budgetAdditions, action.payload],
@@ -247,6 +272,12 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_BALANCE_ADJUSTMENTS":
 			return { ...state, balanceAdjustments: action.payload };
 		case "ADD_BALANCE_ADJUSTMENT":
+			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
+			if (
+				state.balanceAdjustments.some((a) => a.id === action.payload.id)
+			) {
+				return state;
+			}
 			return {
 				...state,
 				balanceAdjustments: [
@@ -268,6 +299,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 					a.id === action.payload.id ? action.payload : a,
 				),
 			};
+		case "SET_USER":
+			return { ...state, user: action.payload };
+		case "SET_AUTH_LOADING":
+			return { ...state, authLoading: action.payload };
 		default:
 			return state;
 	}
@@ -548,25 +583,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 		[],
 	);
 
-	// ── Mount: read room from URL ─────────────────────────────────────────────
+	// ── Mount: auth check → then room from URL ───────────────────────────────
 
 	useEffect(() => {
-		const params = new URLSearchParams(window.location.search);
-		const roomId = params.get("room");
-
-		if (!roomId) {
-			dispatch({
-				type: "SET_STATUS",
-				payload: isOnline ? "idle" : "offline",
-			});
-			return;
-		}
-
-		if (isOnline) {
-			loadRoomFromSupabase(roomId).then((found) => {
-				if (found) subscribeToRoom(roomId);
-			});
-		} else {
+		// ── Offline / no Supabase ──────────────────────────────────────────────
+		if (!supabase) {
+			dispatch({ type: "SET_AUTH_LOADING", payload: false });
+			const params = new URLSearchParams(window.location.search);
+			const roomId = params.get("room");
+			if (!roomId) {
+				dispatch({ type: "SET_STATUS", payload: "offline" });
+				return;
+			}
 			const data = readLocalData();
 			const roomData = data[roomId];
 			if (roomData) {
@@ -583,9 +611,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				});
 				dispatch({ type: "SET_STATUS", payload: "offline" });
 			}
+			return;
 		}
 
+		// ── Online: check session first, then load room ─────────────────────────
+		supabase.auth.getSession().then(({ data: { session } }) => {
+			dispatch({
+				type: "SET_USER",
+				payload: session?.user ? mapUser(session.user) : null,
+			});
+			dispatch({ type: "SET_AUTH_LOADING", payload: false });
+
+			if (session?.user) {
+				const params = new URLSearchParams(window.location.search);
+				const roomId = params.get("room");
+				if (roomId) {
+					loadRoomFromSupabase(roomId).then((found) => {
+						if (found) subscribeToRoom(roomId);
+					});
+				} else {
+					dispatch({ type: "SET_STATUS", payload: "idle" });
+				}
+			}
+		});
+
+		// Listen for sign-in / sign-out events after initial load.
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange((event, session) => {
+			dispatch({
+				type: "SET_USER",
+				payload: session?.user ? mapUser(session.user) : null,
+			});
+			if (event === "SIGNED_OUT") {
+				dispatch({ type: "CLEAR_ROOM" });
+				clearRoomFromUrl();
+			}
+		});
+
 		return () => {
+			subscription.unsubscribe();
 			if (supabase && channelRef.current) {
 				supabase.removeChannel(channelRef.current);
 			}
@@ -597,23 +662,75 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 	const actions = useMemo<StoreActions>(
 		() => ({
+			// ── signInWithGoogle ─────────────────────────────────────────────────────────
+			signInWithGoogle: async () => {
+				if (!supabase) return;
+				await supabase.auth.signInWithOAuth({
+					provider: "google",
+					options: { redirectTo: window.location.origin },
+				});
+			},
+
+			// ── signInWithGitHub ─────────────────────────────────────────────────────────
+			signInWithGitHub: async () => {
+				if (!supabase) return;
+				await supabase.auth.signInWithOAuth({
+					provider: "github",
+					options: { redirectTo: window.location.origin },
+				});
+			},
+
+			// ── signInAnonymously ───────────────────────────────────────────────────────
+			signInAnonymously: async (token: string) => {
+				if (!supabase) return;
+				const { error } = await supabase.auth.signInAnonymously({
+					options: { captchaToken: token },
+				});
+				console.log(error);
+				if (error)
+					dispatch({ type: "SET_ERROR", payload: error.message });
+			},
+
+			// ── signOut ───────────────────────────────────────────────────────────────────
+			signOut: async () => {
+				if (!supabase) return;
+				// onAuthStateChange handles CLEAR_ROOM + SET_USER(null)
+				await supabase.auth.signOut();
+			},
+
 			// ── createRoom ─────────────────────────────────────────────────────────
 			createRoom: async (name, currency = "USD") => {
 				const id = generateRoomId();
 				const now = new Date().toISOString();
-				const room: Room = { id, name, currency, createdAt: now };
+				const room: Room = {
+					id,
+					name,
+					currency,
+					createdAt: now,
+					listed: true,
+				};
 
 				if (supabase) {
 					dispatch({ type: "SET_STATUS", payload: "loading" });
 
 					const { error } = await supabase
 						.from("rooms")
-						.insert({ id, name, currency });
+						.insert({ id, name, currency, listed: true });
 
 					if (error) {
 						dispatch({ type: "SET_ERROR", payload: error.message });
 						dispatch({ type: "SET_STATUS", payload: "error" });
-						return;
+						throw new Error(error.message);
+					}
+
+					// Register the creator as admin of this room.
+					const userId = stateRef.current.user?.id;
+					if (userId) {
+						await supabase.from("room_members").insert({
+							room_id: id,
+							user_id: userId,
+							role: "admin",
+						});
 					}
 
 					dispatch({ type: "SET_ROOM", payload: room });
@@ -646,9 +763,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				pushRoomToUrl(id);
 			},
 
-			// ── joinRoom ───────────────────────────────────────────────────────────
+			// ── joinRoom ─────────────────────────────────────────────────────────
 			joinRoom: async (roomId) => {
 				if (supabase) {
+					// join_room RPC runs SECURITY DEFINER so it can verify the room
+					// exists and add the caller to room_members even if RLS would
+					// otherwise block direct SELECT on the rooms table.
+					const { data: result, error: rpcError } =
+						await supabase.rpc("join_room", { p_room_id: roomId });
+					if (rpcError || !result?.found) return false;
+
+					// Now that we're a member, load the full room data.
 					const found = await loadRoomFromSupabase(roomId);
 					if (!found) return false;
 					subscribeToRoom(roomId);
@@ -773,36 +898,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				const now = new Date().toISOString();
 
 				// ── Handle receipt file ─────────────────────────────────────────
-				let receiptUrls = new Set<string>(
-					expenseData.receipts.map((r) => r.url),
-				);
-				if (expenseData.receipts.length > 0) {
-					if (supabase) {
-						// Upload to Supabase Storage
-						const urls = await uploadReceiptFile(
+				let receiptUrls: string[] = [];
+				if (supabase && expenseData.receipts.length > 0) {
+					// Separate existing URLs from new files
+					const existingReceipts: Array<{ id: string; url: string }> =
+						[];
+					const newReceipts: Array<{ id: string; file: File }> = [];
+
+					for (const receipt of expenseData.receipts) {
+						if (receipt.file) {
+							// New file to upload
+							newReceipts.push({
+								id: receipt.id,
+								file: receipt.file,
+							});
+						} else if (
+							receipt.url &&
+							!receipt.url.startsWith("blob:")
+						) {
+							// Existing URL from database (when copying)
+							existingReceipts.push({
+								id: receipt.id,
+								url: receipt.url,
+							});
+						}
+					}
+
+					// Start with existing URLs
+					receiptUrls = existingReceipts.map((r) => r.url);
+
+					// Upload new files
+					if (newReceipts.length > 0) {
+						const uploadedReceipts = await uploadReceiptFile(
 							room.id,
 							id,
-							expenseData.receipts
-								.map((v) => v.file)
-								.filter((v) => !!v),
+							newReceipts,
 						);
-						if (urls)
-							for (const url of urls) {
-								receiptUrls.add(url);
-							}
-					} else {
-						// Offline: store as base64 data URL in localStorage
-						try {
-							const urls = await filesToDataUrl(
-								expenseData.receipts
-									.map((v) => v.file)
-									.filter((v) => !!v),
-							);
-							for (const url of urls) {
-								receiptUrls.add(url);
-							}
-						} catch {
-							// skip receipt if conversion fails
+						if (uploadedReceipts) {
+							receiptUrls = [
+								...receiptUrls,
+								...uploadedReceipts.map((r) => r.url),
+							];
 						}
 					}
 				}
@@ -816,11 +952,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: expenseData.source,
 					paidById: expenseData.paidById ?? null,
 					splitAmong: expenseData.splitAmong,
-					receiptUrl: Array.from(receiptUrls),
+					receiptUrl: receiptUrls.length > 0 ? receiptUrls : null,
 					createdAt: now,
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({ type: "ADD_EXPENSE", payload: expense });
+
+					// Then insert into database
 					const { error } = await supabase.from("expenses").insert({
 						id,
 						room_id: room.id,
@@ -830,11 +970,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						source: expense.source,
 						paid_by_id: expense.paidById,
 						split_among: expense.splitAmong,
-						receipt_url: Array.from(receiptUrls),
+						receipt_url:
+							receiptUrls.length > 0 ? receiptUrls : null,
 					});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT handler will dispatch ADD_EXPENSE.
+					// Real-time INSERT handler will also dispatch ADD_EXPENSE, but that's okay
 				} else {
 					dispatch({ type: "ADD_EXPENSE", payload: expense });
 					saveRoomToLocalStorage(room.id, {
@@ -849,13 +990,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({ type: "REMOVE_EXPENSE", payload: expenseId });
 					const { error } = await supabase
 						.from("expenses")
 						.delete()
 						.eq("id", expenseId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE handler will dispatch REMOVE_EXPENSE.
+					// Real-time DELETE handler will also dispatch REMOVE_EXPENSE,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({ type: "REMOVE_EXPENSE", payload: expenseId });
 					saveRoomToLocalStorage(room.id, {
@@ -903,7 +1047,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				const existing = expenses.find((e) => e.id === expenseId);
 				if (!existing) return;
 
-				// Handle receipt changes
+				// ── Handle receipt changes ──────────────────────────────────────
+				let receiptUrls: string[] = [];
+
+				if (supabase) {
+					// Identify existing URLs vs new files
+					const existingReceipts: Array<{ id: string; url: string }> =
+						[];
+					const newReceipts: Array<{ id: string; file: File }> = [];
+
+					for (const receipt of data.receipts) {
+						if (receipt.file) {
+							// New file to upload
+							newReceipts.push({
+								id: receipt.id,
+								file: receipt.file,
+							});
+						} else if (
+							receipt.url &&
+							!receipt.url.startsWith("blob:")
+						) {
+							// Existing URL from database
+							existingReceipts.push({
+								id: receipt.id,
+								url: receipt.url,
+							});
+						}
+					}
+
+					// Delete receipts that were removed
+					if (existing.receiptUrl) {
+						const existingUrls = existingReceipts.map((r) => r.url);
+						for (const oldUrl of existing.receiptUrl) {
+							if (!existingUrls.includes(oldUrl)) {
+								await deleteReceiptFile(oldUrl);
+							}
+						}
+					}
+
+					// Upload new files
+					if (newReceipts.length > 0) {
+						const uploadedReceipts = await uploadReceiptFile(
+							room.id,
+							expenseId,
+							newReceipts,
+						);
+						if (uploadedReceipts) {
+							receiptUrls = [
+								...existingReceipts.map((r) => r.url),
+								...uploadedReceipts.map((r) => r.url),
+							];
+						} else {
+							receiptUrls = existingReceipts.map((r) => r.url);
+						}
+					} else {
+						receiptUrls = existingReceipts.map((r) => r.url);
+					}
+				}
 
 				const updated: Expense = {
 					...existing,
@@ -913,10 +1113,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: data.source,
 					paidById: data.paidById,
 					splitAmong: data.splitAmong,
-					receiptUrl: data.receipts.map(v => v.url)
+					receiptUrl: receiptUrls.length > 0 ? receiptUrls : null,
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({ type: "UPDATE_EXPENSE", payload: updated });
+
+					// Then update database
 					const { error } = await supabase
 						.from("expenses")
 						.update({
@@ -931,7 +1135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						.eq("id", expenseId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Realtime UPDATE handler will dispatch UPDATE_EXPENSE.
+					// Realtime UPDATE handler will also dispatch UPDATE_EXPENSE, but that's okay
 				} else {
 					dispatch({ type: "UPDATE_EXPENSE", payload: updated });
 					saveRoomToLocalStorage(room.id, {
@@ -959,6 +1163,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "ADD_BUDGET_ADDITION",
+						payload: addition,
+					});
+
+					// Then insert into database
 					const { error } = await supabase
 						.from("budget_additions")
 						.insert({
@@ -970,7 +1181,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT handler will dispatch ADD_BUDGET_ADDITION.
+					// Real-time INSERT handler will also dispatch ADD_BUDGET_ADDITION, but duplicate prevention handles it
 				} else {
 					dispatch({
 						type: "ADD_BUDGET_ADDITION",
@@ -988,13 +1199,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({ type: "REMOVE_BUDGET_ADDITION", payload: id });
 					const { error } = await supabase
 						.from("budget_additions")
 						.delete()
 						.eq("id", id);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE handler will dispatch REMOVE_BUDGET_ADDITION.
+					// Real-time DELETE handler will also dispatch REMOVE_BUDGET_ADDITION,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({ type: "REMOVE_BUDGET_ADDITION", payload: id });
 					saveRoomToLocalStorage(room.id, {
@@ -1023,6 +1237,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "ADD_BALANCE_ADJUSTMENT",
+						payload: adjustment,
+					});
+
+					// Then insert into database
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.insert({
@@ -1035,7 +1256,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time INSERT will dispatch ADD_BALANCE_ADJUSTMENT.
+					// Real-time INSERT will also dispatch ADD_BALANCE_ADJUSTMENT, but duplicate prevention handles it
 				} else {
 					dispatch({
 						type: "ADD_BALANCE_ADJUSTMENT",
@@ -1053,13 +1274,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({
+						type: "REMOVE_BALANCE_ADJUSTMENT",
+						payload: id,
+					});
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.delete()
 						.eq("id", id);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE will dispatch REMOVE_BALANCE_ADJUSTMENT.
+					// Real-time DELETE will also dispatch REMOVE_BALANCE_ADJUSTMENT,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({
 						type: "REMOVE_BALANCE_ADJUSTMENT",
@@ -1125,6 +1352,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				};
 
 				if (supabase) {
+					// Update local state immediately for instant UI feedback
+					dispatch({
+						type: "UPDATE_BALANCE_ADJUSTMENT",
+						payload: updated,
+					});
+
+					// Then update database
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.update({
@@ -1136,7 +1370,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						.eq("id", adjustmentId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Realtime UPDATE handler will dispatch UPDATE_BALANCE_ADJUSTMENT.
+					// Realtime UPDATE handler will also dispatch UPDATE_BALANCE_ADJUSTMENT, but that's okay
 				} else {
 					dispatch({
 						type: "UPDATE_BALANCE_ADJUSTMENT",
@@ -1147,6 +1381,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							a.id === adjustmentId ? updated : a,
 						),
 					});
+				}
+			},
+
+			// ── updateRoom ─────────────────────────────────────────────────────────
+			updateRoom: async (data) => {
+				const { room } = stateRef.current;
+				if (!room) return;
+
+				const updated: Room = { ...room, ...data };
+
+				// Optimistic update — apply immediately so the UI reacts.
+				dispatch({ type: "SET_ROOM", payload: updated });
+
+				if (supabase) {
+					const patch: Partial<Omit<DbRoom, "id" | "created_at">> =
+						{};
+					if (data.name !== undefined) patch.name = data.name;
+					if (data.listed !== undefined) patch.listed = data.listed;
+					const { error } = await supabase
+						.from("rooms")
+						.update(patch)
+						.eq("id", room.id);
+					if (error)
+						dispatch({ type: "SET_ERROR", payload: error.message });
+				} else {
+					saveRoomToLocalStorage(room.id, { room: updated });
 				}
 			},
 		}),

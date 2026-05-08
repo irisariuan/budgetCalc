@@ -367,7 +367,10 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 				source: expense.source,
 				paidById: expense.paidById,
 				splitAmong: expense.splitAmong,
-				receipts: expense.receiptUrl?.map((url) => ({ url })) ?? [],
+				receipts: expense.receiptUrl?.map((url) => ({
+					id: crypto.randomUUID(), // Generate new UUID for copied receipts
+					url
+				})) ?? [],
 			});
 			onClose();
 			toast.success("Expense duplicated");
@@ -605,7 +608,10 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 		setSource(expense.source);
 		setPaidById(expense.paidById ?? "");
 		setSplitAmong(expense.splitAmong);
-		setReceipts(expense.receiptUrl?.map((v) => ({ url: v })) || []);
+		setReceipts(expense.receiptUrl?.map((url) => ({
+			id: crypto.randomUUID(), // Generate UUID for existing receipts
+			url
+		})) || []);
 		setErrors({});
 	}, [expense.id]);
 
@@ -900,22 +906,28 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 // ─── Public Panel (Dialog on desktop, Drawer on mobile) ──────────────────────
 
 export interface ExpenseDetailPanelProps {
-	expense: Expense | null;
+	expenseId: string | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
 
 export function ExpenseDetailPanel({
-	expense,
+	expenseId,
 	open,
 	onOpenChange,
 }: ExpenseDetailPanelProps) {
+	const { state } = useStore();
 	const [isEditing, setIsEditing] = useState(false);
+
+	// Look up the current expense from store by ID to always get fresh data
+	const expense = expenseId
+		? state.expenses.find((e) => e.id === expenseId) || null
+		: null;
 
 	// Reset edit mode when panel closes or a different expense is opened
 	useEffect(() => {
 		if (!open) setIsEditing(false);
-	}, [open, expense?.id]);
+	}, [open, expenseId]);
 
 	if (!expense) return null;
 

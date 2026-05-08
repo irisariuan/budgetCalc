@@ -1,17 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import type {
 	Room,
 	Member,
 	BudgetAddition,
 	BalanceAdjustment,
 	Expense,
+	AuthUser,
 } from "./types";
+
+export type DbRoomMember = {
+	room_id: string;
+	user_id: string;
+	role: "admin" | "member";
+	joined_at: string;
+};
 
 export type DbRoom = {
 	id: string;
 	name: string;
 	currency: string;
 	created_at: string;
+	/** Defaults to true; false hides the room from the public list. */
+	listed: boolean;
 };
 
 export type DbMember = {
@@ -63,6 +74,14 @@ export type Database = {
 				Update: Partial<Omit<DbRoom, "id" | "created_at">>;
 				Relationships: [];
 			};
+			room_members: {
+				Row: DbRoomMember;
+				Insert: Omit<DbRoomMember, "joined_at"> & {
+					joined_at?: string;
+				};
+				Update: Partial<Pick<DbRoomMember, "role">>;
+				Relationships: [];
+			};
 			members: {
 				Row: DbMember;
 				Insert: Omit<DbMember, "created_at">;
@@ -99,7 +118,12 @@ export type Database = {
 			};
 		};
 		Views: Record<string, never>;
-		Functions: Record<string, never>;
+		Functions: {
+			join_room: {
+				Args: { p_room_id: string };
+				Returns: { found: boolean };
+			};
+		};
 	};
 };
 
@@ -113,12 +137,25 @@ export const supabase =
 
 export const isOnline = supabase !== null;
 
+export function mapUser(user: User): AuthUser {
+	const meta = user.user_metadata ?? {};
+	return {
+		id: user.id,
+		email: user.email ?? null,
+		fullName: (meta.full_name ?? meta.name ?? null) as string | null,
+		avatarUrl: (meta.avatar_url ?? null) as string | null,
+		isAnonymous: user.is_anonymous ?? false,
+	};
+}
+
 export function mapRoom(row: DbRoom): Room {
 	return {
 		id: row.id,
 		name: row.name,
 		currency: row.currency,
 		createdAt: row.created_at,
+		// Default true so existing rows without the column stay visible.
+		listed: row.listed ?? true,
 	};
 }
 
@@ -183,17 +220,21 @@ const RECEIPTS_BUCKET = "receipts";
 export async function uploadReceiptFile(
 	roomId: string,
 	expenseId: string,
-	files: File[],
-): Promise<string[] | null> {
+	receipts: Array<{ id: string; file: File }>,
+): Promise<Array<{ id: string; url: string }> | null> {
 	if (!supabase) return null;
-	const urls = [];
-	for (const file of files) {
-		const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-		const path = `${roomId}/${expenseId}.${ext}`;
+	const results = [];
+	for (const receipt of receipts) {
+		const ext = receipt.file.name.split(".").pop()?.toLowerCase() || "jpg";
+		// Use receipt UUID for unique filename
+		const path = `${roomId}/${expenseId}_${receipt.id}.${ext}`;
 
 		const { error } = await supabase.storage
 			.from(RECEIPTS_BUCKET)
-			.upload(path, file, { upsert: true, contentType: file.type });
+			.upload(path, receipt.file, {
+				upsert: true,
+				contentType: receipt.file.type,
+			});
 		if (error) {
 			console.error("Receipt upload failed:", error.message);
 			continue;
@@ -201,10 +242,10 @@ export async function uploadReceiptFile(
 		const {
 			data: { publicUrl },
 		} = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(path);
-		urls.push(publicUrl);
+		results.push({ id: receipt.id, url: publicUrl });
 	}
 
-	return urls;
+	return results;
 }
 
 /**
@@ -224,19 +265,4 @@ export async function deleteReceiptFile(publicUrl: string): Promise<void> {
 	} catch {
 		// best-effort
 	}
-}
-
-/** Converts Files to a base64 data-URL (used in offline/localStorage mode). */
-export function filesToDataUrl(files: File[]): Promise<string[]> {
-	return Promise.all(
-		files.map(
-			(file) =>
-				new Promise<string>((resolve, reject) => {
-					const reader = new FileReader();
-					reader.onload = () => resolve(reader.result as string);
-					reader.onerror = reject;
-					reader.readAsDataURL(file);
-				}),
-		),
-	);
 }
