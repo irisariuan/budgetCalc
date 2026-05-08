@@ -1,10 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import type {
 	Room,
 	Member,
 	BudgetAddition,
 	BalanceAdjustment,
 	Expense,
+	AuthUser,
 } from "./types";
 
 export type DbRoom = {
@@ -114,6 +116,17 @@ export const supabase =
 		: null;
 
 export const isOnline = supabase !== null;
+
+export function mapUser(user: User): AuthUser {
+	const meta = user.user_metadata ?? {};
+	return {
+		id: user.id,
+		email: user.email ?? null,
+		fullName: (meta.full_name ?? meta.name ?? null) as string | null,
+		avatarUrl: (meta.avatar_url ?? null) as string | null,
+		isAnonymous: user.is_anonymous ?? false,
+	};
+}
 
 export function mapRoom(row: DbRoom): Room {
 	return {

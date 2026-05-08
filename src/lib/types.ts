@@ -78,6 +78,14 @@ export interface BalanceDataPoint {
 
 export type StoreStatus = "idle" | "loading" | "synced" | "error" | "offline";
 
+export interface AuthUser {
+	id: string;
+	email: string | null;
+	fullName: string | null;
+	avatarUrl: string | null;
+	isAnonymous: boolean;
+}
+
 export interface AppState {
 	status: StoreStatus;
 	room: Room | null;
@@ -86,6 +94,9 @@ export interface AppState {
 	budgetAdditions: BudgetAddition[];
 	balanceAdjustments: BalanceAdjustment[];
 	error: string | null;
+	user: AuthUser | null;
+	/** True while the initial Supabase session check is in flight. */
+	authLoading: boolean;
 }
 
 export type AppAction =
@@ -107,4 +118,6 @@ export type AppAction =
 	| { type: "SET_BALANCE_ADJUSTMENTS"; payload: BalanceAdjustment[] }
 	| { type: "ADD_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment }
 	| { type: "REMOVE_BALANCE_ADJUSTMENT"; payload: string }
-	| { type: "UPDATE_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment };
+	| { type: "UPDATE_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment }
+	| { type: "SET_USER"; payload: AuthUser | null }
+	| { type: "SET_AUTH_LOADING"; payload: boolean };

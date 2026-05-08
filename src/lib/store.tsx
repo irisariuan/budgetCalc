@@ -13,6 +13,7 @@ import {
 	supabase,
 	isOnline,
 	mapRoom,
+	mapUser,
 	mapMember,
 	mapExpense,
 	mapBudgetAddition,
@@ -30,6 +31,7 @@ import type {
 import type {
 	AppAction,
 	AppState,
+	AuthUser,
 	BalanceAdjustment,
 	BudgetAddition,
 	Expense,
@@ -60,6 +62,10 @@ interface StoreActions {
 	/** Returns false if the room was not found. */
 	joinRoom: (roomId: string) => Promise<boolean>;
 	leaveRoom: () => void;
+	signInWithGoogle: () => Promise<void>;
+	signInWithGitHub: () => Promise<void>;
+	signInAnonymously: () => Promise<void>;
+	signOut: () => Promise<void>;
 	addMember: (name: string, color: string) => Promise<void>;
 	removeMember: (memberId: string) => Promise<void>;
 	updateMember: (
@@ -187,6 +193,10 @@ const initialState: AppState = {
 	budgetAdditions: [],
 	balanceAdjustments: [],
 	error: null,
+	user: null,
+	// Start as loading so the app waits for getSession() before rendering.
+	// Set to false immediately when Supabase is unavailable.
+	authLoading: isOnline,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -198,7 +208,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 		case "SET_ROOM":
 			return { ...state, room: action.payload };
 		case "CLEAR_ROOM":
-			return { ...initialState, status: isOnline ? "idle" : "offline" };
+			return {
+				...initialState,
+				status: isOnline ? "idle" : "offline",
+				// Keep the user signed in when leaving a room.
+				user: state.user,
+				authLoading: false,
+			};
 		case "SET_MEMBERS":
 			return { ...state, members: action.payload };
 		case "ADD_MEMBER":
@@ -283,6 +299,10 @@ function reducer(state: AppState, action: AppAction): AppState {
 					a.id === action.payload.id ? action.payload : a,
 				),
 			};
+		case "SET_USER":
+			return { ...state, user: action.payload };
+		case "SET_AUTH_LOADING":
+			return { ...state, authLoading: action.payload };
 		default:
 			return state;
 	}
@@ -563,25 +583,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 		[],
 	);
 
-	// ── Mount: read room from URL ─────────────────────────────────────────────
+	// ── Mount: auth check → then room from URL ───────────────────────────────
 
 	useEffect(() => {
-		const params = new URLSearchParams(window.location.search);
-		const roomId = params.get("room");
-
-		if (!roomId) {
-			dispatch({
-				type: "SET_STATUS",
-				payload: isOnline ? "idle" : "offline",
-			});
-			return;
-		}
-
-		if (isOnline) {
-			loadRoomFromSupabase(roomId).then((found) => {
-				if (found) subscribeToRoom(roomId);
-			});
-		} else {
+		// ── Offline / no Supabase ──────────────────────────────────────────────
+		if (!supabase) {
+			dispatch({ type: "SET_AUTH_LOADING", payload: false });
+			const params = new URLSearchParams(window.location.search);
+			const roomId = params.get("room");
+			if (!roomId) {
+				dispatch({ type: "SET_STATUS", payload: "offline" });
+				return;
+			}
 			const data = readLocalData();
 			const roomData = data[roomId];
 			if (roomData) {
@@ -598,9 +611,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				});
 				dispatch({ type: "SET_STATUS", payload: "offline" });
 			}
+			return;
 		}
 
+		// ── Online: check session first, then load room ─────────────────────────
+		supabase.auth.getSession().then(({ data: { session } }) => {
+			dispatch({
+				type: "SET_USER",
+				payload: session?.user ? mapUser(session.user) : null,
+			});
+			dispatch({ type: "SET_AUTH_LOADING", payload: false });
+
+			if (session?.user) {
+				const params = new URLSearchParams(window.location.search);
+				const roomId = params.get("room");
+				if (roomId) {
+					loadRoomFromSupabase(roomId).then((found) => {
+						if (found) subscribeToRoom(roomId);
+					});
+				} else {
+					dispatch({ type: "SET_STATUS", payload: "idle" });
+				}
+			}
+		});
+
+		// Listen for sign-in / sign-out events after initial load.
+		const {
+			data: { subscription },
+		} = supabase.auth.onAuthStateChange((event, session) => {
+			dispatch({
+				type: "SET_USER",
+				payload: session?.user ? mapUser(session.user) : null,
+			});
+			if (event === "SIGNED_OUT") {
+				dispatch({ type: "CLEAR_ROOM" });
+				clearRoomFromUrl();
+			}
+		});
+
 		return () => {
+			subscription.unsubscribe();
 			if (supabase && channelRef.current) {
 				supabase.removeChannel(channelRef.current);
 			}
@@ -612,6 +662,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 	const actions = useMemo<StoreActions>(
 		() => ({
+			// ── signInWithGoogle ─────────────────────────────────────────────────────────
+			signInWithGoogle: async () => {
+				if (!supabase) return;
+				await supabase.auth.signInWithOAuth({
+					provider: "google",
+					options: { redirectTo: window.location.origin },
+				});
+			},
+
+			// ── signInWithGitHub ─────────────────────────────────────────────────────────
+			signInWithGitHub: async () => {
+				if (!supabase) return;
+				await supabase.auth.signInWithOAuth({
+					provider: "github",
+					options: { redirectTo: window.location.origin },
+				});
+			},
+
+			// ── signInAnonymously ───────────────────────────────────────────────────────
+			signInAnonymously: async () => {
+				if (!supabase) return;
+				const { error } = await supabase.auth.signInAnonymously();
+				if (error)
+					dispatch({ type: "SET_ERROR", payload: error.message });
+			},
+
+			// ── signOut ───────────────────────────────────────────────────────────────────
+			signOut: async () => {
+				if (!supabase) return;
+				// onAuthStateChange handles CLEAR_ROOM + SET_USER(null)
+				await supabase.auth.signOut();
+			},
+
 			// ── createRoom ─────────────────────────────────────────────────────────
 			createRoom: async (name, currency = "USD") => {
 				const id = generateRoomId();
