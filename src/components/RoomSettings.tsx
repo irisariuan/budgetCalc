@@ -284,7 +284,7 @@ export function RoomSettings() {
 			<MemberDisplay />
 
 			{/* ── Invite Panel Button ──────────────────────────────────────── */}
-			<Button
+			{inviteOnly && <Button
 				variant="outline"
 				onClick={() => setInviteOpen(true)}
 				className="w-full gap-2"
@@ -293,7 +293,7 @@ export function RoomSettings() {
 			>
 				<Users className="size-4" />
 				Invite Members
-			</Button>
+			</Button>}
 			{/* ── Quit Room and Delete Room ──────────────────────────────────────────────────────── */}
 			<div className="flex gap-2">
 				<AlertDialog>
