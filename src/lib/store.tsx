@@ -59,9 +59,13 @@ interface LocalData {
 
 interface StoreActions {
 	createRoom: (name: string, currency?: string) => Promise<void>;
-	/** Returns false if the room was not found. */
-	joinRoom: (roomId: string) => Promise<boolean>;
+	/** Returns false if the room was not found, "invite_only" if the room requires invite-only access, or true on success. */
+	joinRoom: (roomId: string) => Promise<boolean | "invite_only">;
+	/** Leave room view */
 	leaveRoom: () => void;
+	/** Remove user from room */
+	quitRoom: (roomId: string) => Promise<void>;
+	deleteRoom: (roomId: string) => Promise<void>;
 	signInWithGoogle: () => Promise<void>;
 	signInWithGitHub: () => Promise<void>;
 	signInAnonymously: (OAuthToken: string) => Promise<void>;
@@ -214,6 +218,7 @@ const initialState: AppState = {
 	// Start as loading so the app waits for getSession() before rendering.
 	// Set to false immediately when Supabase is unavailable.
 	authLoading: isOnline,
+	userRole: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -229,6 +234,13 @@ function reducer(state: AppState, action: AppAction): AppState {
 				...initialState,
 				status: isOnline ? "idle" : "offline",
 				// Keep the user signed in when leaving a room.
+				user: state.user,
+				authLoading: false,
+			};
+		case "REMOVE_ROOM":
+			return {
+				...initialState,
+				status: isOnline ? "idle" : "offline",
 				user: state.user,
 				authLoading: false,
 			};
@@ -320,6 +332,8 @@ function reducer(state: AppState, action: AppAction): AppState {
 			return { ...state, user: action.payload };
 		case "SET_AUTH_LOADING":
 			return { ...state, authLoading: action.payload };
+		case "SET_USER_ROLE":
+			return { ...state, userRole: action.payload };
 		default:
 			return state;
 	}
@@ -576,6 +590,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						.eq("room_id", roomId),
 				]);
 
+			// Load current user's role in this room.
+			const userId = stateRef.current.user?.id;
+			let userRole: "admin" | "member" | null = null;
+			if (userId) {
+				const { data: rm } = await supabase
+					.from("room_members")
+					.select("role")
+					.eq("room_id", roomId)
+					.eq("user_id", userId)
+					.single();
+				userRole = rm?.role ?? null;
+			}
+
 			dispatch({ type: "SET_ROOM", payload: mapRoom(roomRow) });
 			dispatch({
 				type: "SET_MEMBERS",
@@ -593,11 +620,88 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				type: "SET_BALANCE_ADJUSTMENTS",
 				payload: (adjustmentsRes.data ?? []).map(mapBalanceAdjustment),
 			});
+			dispatch({ type: "SET_USER_ROLE", payload: userRole });
 			dispatch({ type: "SET_STATUS", payload: "synced" });
 
 			return true;
 		},
 		[],
+	);
+
+	// ── Join room helper (used by mount effect and actions) ────────────────────
+
+	const joinRoomInternal = useCallback(
+		async (code: string): Promise<boolean | "invite_only"> => {
+			if (supabase) {
+				let resolvedRoomId: string | null = null;
+				let inviteOnlyError = false;
+
+				if (code.length === 6) {
+					const { data: result, error: rpcError } =
+						await supabase.rpc("join_room", {
+							p_room_id: code,
+							p_invite_code: "",
+						});
+					if (!rpcError) {
+						if (result?.error === "invite_only") {
+							inviteOnlyError = true;
+						} else if (result?.found) {
+							resolvedRoomId = result.room_id ?? code;
+						}
+					}
+				}
+
+				if (!resolvedRoomId && !inviteOnlyError) {
+					const { data: result, error: rpcError } =
+						await supabase.rpc("join_room", {
+							p_room_id: "",
+							p_invite_code: code,
+						});
+					if (!rpcError && result?.found) {
+						resolvedRoomId = result.room_id ?? code;
+					}
+				}
+
+				if (!resolvedRoomId) {
+					if (inviteOnlyError) {
+						dispatch({
+							type: "SET_ERROR",
+							payload:
+								"This room is invite-only. Use the invite link instead.",
+						});
+						return "invite_only";
+					}
+					return false;
+				}
+
+				const found = await loadRoomFromSupabase(resolvedRoomId);
+				if (!found) return false;
+				subscribeToRoom(resolvedRoomId);
+				pushRoomToUrl(resolvedRoomId);
+				return true;
+			}
+
+			// localStorage path
+			const data = readLocalData();
+			const roomData = data[code];
+			if (!roomData) return false;
+
+			dispatch({ type: "SET_ROOM", payload: roomData.room });
+			dispatch({ type: "SET_MEMBERS", payload: roomData.members });
+			dispatch({ type: "SET_EXPENSES", payload: roomData.expenses });
+			dispatch({
+				type: "SET_BUDGET_ADDITIONS",
+				payload: roomData.budgetAdditions,
+			});
+			dispatch({
+				type: "SET_BALANCE_ADJUSTMENTS",
+				payload: roomData.balanceAdjustments ?? [],
+			});
+			dispatch({ type: "SET_STATUS", payload: "offline" });
+			pushRoomToUrl(code);
+			return true;
+		},
+		[loadRoomFromSupabase, subscribeToRoom],
 	);
 
 	// ── Mount: auth check → then room from URL ───────────────────────────────
@@ -642,9 +746,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 			if (session?.user) {
 				const params = new URLSearchParams(window.location.search);
 				const roomId = params.get("room");
+				const inviteCode = params.get("invite");
 				if (roomId) {
 					loadRoomFromSupabase(roomId).then((found) => {
 						if (found) subscribeToRoom(roomId);
+					});
+				} else if (inviteCode) {
+					// Join via invite link
+					joinRoomInternal(inviteCode).then((success) => {
+						if (success) {
+							// Clear the invite param from URL
+							const url = new URL(window.location.href);
+							url.searchParams.delete("invite");
+							window.history.replaceState({}, "", url.toString());
+						}
 					});
 				} else {
 					dispatch({ type: "SET_STATUS", payload: "idle" });
@@ -791,77 +906,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 			// ── joinRoom ─────────────────────────────────────────────────────────
 			joinRoom: async (code) => {
-				if (supabase) {
-					// Try joining by room ID first (6-char code), then by invite code (8-char).
-					// join_room RPC runs SECURITY DEFINER so it can verify the room
-					// exists and add the caller to room_members even if RLS would
-					// otherwise block direct SELECT on the rooms table.
-					let resolvedRoomId: string | null = null;
-
-					if (code.length === 6) {
-						// Treat as room ID
-						const { data: result, error: rpcError } =
-							await supabase.rpc("join_room", {
-								p_room_id: code,
-							});
-						if (!rpcError && result?.found) {
-							resolvedRoomId = code;
-						}
-					}
-
-					// If room ID didn't work, try invite code
-					if (!resolvedRoomId) {
-						const { data: result, error: rpcError } =
-							await supabase.rpc("join_room", {
-								p_invite_code: code,
-							});
-						if (!rpcError && result?.found) {
-							// The RPC returns the room_id when joining by invite code
-							resolvedRoomId = code; // We'll load via subscribe
-						}
-					}
-
-					if (!resolvedRoomId) return false;
-
-					// Now that we're a member, load the full room data.
-					// If we joined by invite code, we need to find the room_id first.
-					let roomIdToLoad = resolvedRoomId;
-					if (code.length === 8) {
-						// Joined by invite code — fetch room_id from the room
-						const { data: rooms } = await supabase
-							.from("rooms")
-							.select("id")
-							.eq("invite_code", code)
-							.single();
-						if (rooms) roomIdToLoad = rooms.id;
-					}
-
-					const found = await loadRoomFromSupabase(roomIdToLoad);
-					if (!found) return false;
-					subscribeToRoom(roomIdToLoad);
-					pushRoomToUrl(roomIdToLoad);
-					return true;
-				}
-
-				// localStorage path
-				const data = readLocalData();
-				const roomData = data[code];
-				if (!roomData) return false;
-
-				dispatch({ type: "SET_ROOM", payload: roomData.room });
-				dispatch({ type: "SET_MEMBERS", payload: roomData.members });
-				dispatch({ type: "SET_EXPENSES", payload: roomData.expenses });
-				dispatch({
-					type: "SET_BUDGET_ADDITIONS",
-					payload: roomData.budgetAdditions,
-				});
-				dispatch({
-					type: "SET_BALANCE_ADJUSTMENTS",
-					payload: roomData.balanceAdjustments ?? [],
-				});
-				dispatch({ type: "SET_STATUS", payload: "offline" });
-				pushRoomToUrl(code);
-				return true;
+				return joinRoomInternal(code);
 			},
 
 			// ── leaveRoom ──────────────────────────────────────────────────────────
@@ -871,6 +916,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					channelRef.current = null;
 				}
 				dispatch({ type: "CLEAR_ROOM" });
+				clearRoomFromUrl();
+			},
+
+			// ── quitRoom (remove self from room via Supabase) ──────────────────
+			quitRoom: async (roomId: string) => {
+				if (!supabase) return;
+				const { error } = await supabase.rpc("quit_room", {
+					p_room_id: roomId,
+				});
+				if (error) {
+					dispatch({ type: "SET_ERROR", payload: error.message });
+					throw error;
+				}
+				// Clean up real-time subscription
+				if (channelRef.current) {
+					supabase.removeChannel(channelRef.current);
+					channelRef.current = null;
+				}
+				dispatch({ type: "REMOVE_ROOM", payload: roomId });
+				clearRoomFromUrl();
+			},
+
+			// ── deleteRoom (admin-only, via Supabase) ──────────────────────────
+			deleteRoom: async (roomId: string) => {
+				if (!supabase) return;
+				const { error } = await supabase.rpc("delete_room", {
+					p_room_id: roomId,
+				});
+				if (error) {
+					dispatch({ type: "SET_ERROR", payload: error.message });
+					throw error;
+				}
+				// Clean up real-time subscription
+				if (channelRef.current) {
+					supabase.removeChannel(channelRef.current);
+					channelRef.current = null;
+				}
+				dispatch({ type: "REMOVE_ROOM", payload: roomId });
 				clearRoomFromUrl();
 			},
 

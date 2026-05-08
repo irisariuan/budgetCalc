@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, Copy, Check, Users } from "lucide-react";
+import { Link, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,45 +30,8 @@ interface InvitePanelProps {
 export function InvitePanel({ open, onOpenChange }: InvitePanelProps) {
 	const { state } = useStore();
 	const { room } = state;
-
-	const [copied, setCopied] = useState(false);
-	const [inviteName, setInviteName] = useState("");
-	const [sending, setSending] = useState(false);
-
 	if (!room) return null;
-
 	const inviteLink = `${window.location.origin}?invite=${room.inviteCode}`;
-
-	const handleCopyLink = async () => {
-		try {
-			await navigator.clipboard.writeText(inviteLink);
-			setCopied(true);
-			toast("Invite link copied");
-			setTimeout(() => setCopied(false), 2000);
-		} catch {
-			toast("Failed to copy link");
-		}
-	};
-
-	const handleSendInvite = async () => {
-		const trimmed = inviteName.trim();
-		if (!trimmed || sending) return;
-
-		setSending(true);
-		try {
-			const message = trimmed
-				? `Hey ${trimmed}! Join our ${room.name} trip expense tracker on BudgetCalc: ${inviteLink}`
-				: `Join our ${room.name} trip expense tracker on BudgetCalc: ${inviteLink}`;
-			await navigator.clipboard.writeText(message);
-			toast("Invite message copied to clipboard");
-			setInviteName("");
-		} catch {
-			toast("Failed to copy invite message");
-		} finally {
-			setSending(false);
-		}
-	};
-
 	const handleShare = async () => {
 		if (navigator.share) {
 			try {
@@ -80,7 +44,13 @@ export function InvitePanel({ open, onOpenChange }: InvitePanelProps) {
 				// User cancelled or share failed
 			}
 		} else {
-			await handleCopyLink();
+			// Fallback: copy the link
+			try {
+				await navigator.clipboard.writeText(inviteLink);
+				toast("Invite link copied");
+			} catch {
+				toast("Failed to copy link");
+			}
 		}
 	};
 
@@ -116,18 +86,12 @@ export function InvitePanel({ open, onOpenChange }: InvitePanelProps) {
 									readOnly
 									className="font-mono text-xs"
 								/>
-								<Button
-									size="icon"
-									variant="outline"
-									onClick={handleCopyLink}
+								<CopyButton
+									text={inviteLink}
+									successMessage="Invite link copied"
 									className="shrink-0"
-								>
-									{copied ? (
-										<Check className="size-4 text-green-500" />
-									) : (
-										<Copy className="size-4" />
-									)}
-								</Button>
+									ariaLabel="Copy invite link"
+								/>
 							</div>
 						</CardContent>
 					</Card>

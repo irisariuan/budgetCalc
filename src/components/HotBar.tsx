@@ -1,6 +1,7 @@
-import { Plus, PiggyBank, LogOut, Loader2, Clipboard } from "lucide-react";
+import { Plus, PiggyBank, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/ui/copy-button";
 import { useStore } from "@/lib/store";
 import { AddExpenseDialog } from "@/components/AddExpenseDialog";
 import { AddBudgetDialog } from "@/components/AddBudgetDialog";
@@ -98,15 +99,12 @@ export function HotBar() {
 						>
 							{room.id}
 						</Badge>
-						<Button
-							variant="outline"
+						<CopyButton
+							text={room.id}
+							successMessage="Room code copied"
 							size="icon-sm"
-							onClick={() => {
-								navigator.clipboard.writeText(room.id);
-							}}
-						>
-							<Clipboard />
-						</Button>
+							ariaLabel="Copy room code"
+						/>
 					</div>
 
 					{/* ── Action buttons (center-right) ── */}

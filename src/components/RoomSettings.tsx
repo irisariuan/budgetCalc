@@ -1,8 +1,29 @@
 import { useState } from "react";
-import { Save, Eye, EyeOff, Users, Copy, RefreshCw, Check } from "lucide-react";
+import {
+	Save,
+	Eye,
+	EyeOff,
+	Users,
+	RefreshCw,
+	LogOut,
+	Trash2,
+	Delete,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
 	Card,
 	CardContent,
@@ -17,7 +38,7 @@ import { cn } from "@/lib/utils";
 
 export function RoomSettings() {
 	const { state, actions } = useStore();
-	const { room } = state;
+	const { room, userRole } = state;
 
 	const [name, setName] = useState(room?.name ?? "");
 	const [listed, setListed] = useState(room?.listed ?? true);
@@ -25,8 +46,6 @@ export function RoomSettings() {
 	const [inviteCode, setInviteCode] = useState(room?.inviteCode ?? "");
 	const [saving, setSaving] = useState(false);
 	const [inviteOpen, setInviteOpen] = useState(false);
-	const [copied, setCopied] = useState(false);
-
 	if (!room) return null;
 
 	const isDirty =
@@ -42,17 +61,6 @@ export function RoomSettings() {
 		await actions.updateRoom({ name: trimmed, listed, inviteOnly });
 		toast("Settings saved");
 		setSaving(false);
-	};
-
-	const handleCopyCode = async () => {
-		try {
-			await navigator.clipboard.writeText(inviteCode);
-			setCopied(true);
-			toast("Invite code copied");
-			setTimeout(() => setCopied(false), 2000);
-		} catch {
-			toast("Failed to copy");
-		}
 	};
 
 	const handleRegenerate = async () => {
@@ -228,18 +236,12 @@ export function RoomSettings() {
 						<div className="flex-1 rounded-lg border border-border bg-muted/50 px-4 py-3 font-mono text-center text-lg tracking-widest">
 							{inviteCode || "—"}
 						</div>
-						<Button
-							size="icon"
-							variant="outline"
-							onClick={handleCopyCode}
-							title="Copy code"
-						>
-							{copied ? (
-								<Check className="size-4 text-green-500" />
-							) : (
-								<Copy className="size-4" />
-							)}
-						</Button>
+						<CopyButton
+							text={inviteCode}
+							successMessage="Invite code copied"
+							ariaLabel="Copy invite code"
+							disabled={!inviteCode}
+						/>
 						<Button
 							size="icon"
 							variant="outline"
@@ -264,10 +266,76 @@ export function RoomSettings() {
 				onClick={() => setInviteOpen(true)}
 				className="w-full gap-2"
 				size="lg"
+				disabled={!inviteCode}
 			>
 				<Users className="size-4" />
 				Invite Members
 			</Button>
+			{/* ── Quit Room and Delete Room ──────────────────────────────────────────────────────── */}
+			<div className="flex gap-2">
+				<AlertDialog>
+					<AlertDialogTrigger asChild>
+						<Button variant="destructive" className="flex-1 gap-2">
+							<Delete />
+							Quit Room
+						</Button>
+					</AlertDialogTrigger>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>
+								Are you absolutely sure?
+							</AlertDialogTitle>
+							<AlertDialogDescription>
+								You may need an invite code to rejoin this room
+								later. This action cannot be undone.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={() => {
+									actions.quitRoom(room.id);
+								}}
+							>
+								Continue
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+				<AlertDialog>
+					<AlertDialogTrigger asChild>
+						<Button
+							variant="destructive"
+							className="flex-1 gap-2"
+							disabled={userRole !== "admin"}
+						>
+							<Trash2 className="size-4" />
+							Delete Room
+						</Button>
+					</AlertDialogTrigger>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>
+								Are you absolutely sure?
+							</AlertDialogTitle>
+							<AlertDialogDescription>
+								This room and all its data will be permanently
+								deleted. This action cannot be undone.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={() => {
+									actions.deleteRoom(room.id);
+								}}
+							>
+								Continue
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			</div>
 
 			{/* ── Save ───────────────────────────────────────────────────────── */}
 			<Button

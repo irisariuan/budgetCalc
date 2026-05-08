@@ -165,8 +165,12 @@ export function RoomSetup() {
 
 		setIsJoining(true);
 		try {
-			const success = await actions.joinRoom(roomId);
-			if (success) {
+			const result = await actions.joinRoom(roomId);
+			if (result === "invite_only") {
+				setJoinError(
+					"This room is invite-only. Use the invite link instead.",
+				);
+			} else if (result) {
 				pushRoomToUrl(roomId);
 			} else {
 				setJoinError("Room not found. Check the code and try again.");

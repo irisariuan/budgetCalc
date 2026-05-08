@@ -125,7 +125,19 @@ export type Database = {
 		Functions: {
 			join_room: {
 				Args: { p_room_id?: string; p_invite_code?: string };
-				Returns: { found: boolean };
+				Returns: { found: boolean; error?: string; room_id?: string };
+			};
+			quit_room: {
+				Args: { p_room_id: string };
+				Returns: {
+					success: boolean;
+					error?: string;
+					was_last_admin?: boolean;
+				};
+			};
+			delete_room: {
+				Args: { p_room_id: string };
+				Returns: { success: boolean; error?: string };
 			};
 		};
 	};

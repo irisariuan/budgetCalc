@@ -32,6 +32,7 @@ export interface Member {
 	name: string;
 	color: string;
 	createdAt: string;
+	role?: "admin" | "member";
 }
 
 export type ExpenseSource = "group" | "personal";
@@ -101,6 +102,8 @@ export interface AppState {
 	user: AuthUser | null;
 	/** True while the initial Supabase session check is in flight. */
 	authLoading: boolean;
+	/** The current user's role within the room (admin | member). */
+	userRole: "admin" | "member" | null;
 }
 
 export type AppAction =
@@ -108,6 +111,7 @@ export type AppAction =
 	| { type: "SET_ERROR"; payload: string | null }
 	| { type: "SET_ROOM"; payload: Room }
 	| { type: "CLEAR_ROOM" }
+	| { type: "REMOVE_ROOM"; payload: string }
 	| { type: "SET_MEMBERS"; payload: Member[] }
 	| { type: "ADD_MEMBER"; payload: Member }
 	| { type: "REMOVE_MEMBER"; payload: string }
@@ -124,4 +128,5 @@ export type AppAction =
 	| { type: "REMOVE_BALANCE_ADJUSTMENT"; payload: string }
 	| { type: "UPDATE_BALANCE_ADJUSTMENT"; payload: BalanceAdjustment }
 	| { type: "SET_USER"; payload: AuthUser | null }
-	| { type: "SET_AUTH_LOADING"; payload: boolean };
+	| { type: "SET_AUTH_LOADING"; payload: boolean }
+	| { type: "SET_USER_ROLE"; payload: "admin" | "member" | null };
