@@ -791,12 +791,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					// Start with existing URLs
 					receiptUrls = [...existingUrls];
 
-					// Upload new files
+					// Upload new files with correct starting index
 					if (filesToUpload.length > 0) {
+						// Start index after existing receipts to avoid filename collisions
+						const startIndex = existingUrls.length;
 						const uploadedUrls = await uploadReceiptFile(
 							room.id,
 							id,
 							filesToUpload,
+							startIndex,
 						);
 						if (uploadedUrls) {
 							receiptUrls = [...receiptUrls, ...uploadedUrls];
