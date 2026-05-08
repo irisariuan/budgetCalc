@@ -61,27 +61,43 @@ export default function ReceiptEditor({
 		});
 	};
 
-	const handleAdd = async (f: File) => {
+	const handleAdd = async (files: File[]) => {
 		setError(null);
-		const err = validate(f);
-		if (err) {
-			setError(err);
-			return;
-		}
-		if (receipts.length >= MAX_FILE) {
+
+		const available = MAX_FILE - receipts.length;
+		if (available <= 0) {
 			setError(`You can only upload up to ${MAX_FILE} receipts.`);
 			return;
 		}
 
-		// Compress the image
-		const compressedFile = await compressImage(f);
+		// Validate each file; collect the valid ones
+		const valid: File[] = [];
+		let firstError: string | null = null;
+		for (const f of files) {
+			const err = validate(f);
+			if (err) {
+				if (!firstError) firstError = err;
+			} else {
+				valid.push(f);
+			}
+		}
+
+		const toAdd = valid.slice(0, available);
+		if (valid.length > available) {
+			firstError = `Only ${available} more receipt${available === 1 ? "" : "s"} can be added (limit is ${MAX_FILE}).`;
+		}
+		if (firstError) setError(firstError);
+		if (toAdd.length === 0) return;
+
+		// Compress all accepted files in parallel
+		const compressed = await Promise.all(toAdd.map(compressImage));
 		onChange([
 			...receipts,
-			{
+			...compressed.map((cf) => ({
 				id: crypto.randomUUID(),
-				file: compressedFile,
-				url: URL.createObjectURL(compressedFile),
-			},
+				file: cf,
+				url: URL.createObjectURL(cf),
+			})),
 		]);
 	};
 
@@ -146,8 +162,10 @@ export default function ReceiptEditor({
 						onDrop={(e) => {
 							e.preventDefault();
 							setDragging(false);
-							const f = e.dataTransfer?.files[0];
-							if (f) handleAdd(f);
+							const files = Array.from(
+								e.dataTransfer?.files ?? [],
+							);
+							if (files.length > 0) handleAdd(files);
 						}}
 						className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed h-24 transition-colors text-sm ${
 							dragging
@@ -169,10 +187,11 @@ export default function ReceiptEditor({
 						ref={addInputRef}
 						type="file"
 						accept={ACCEPTED_TYPES.join(",")}
+						multiple
 						className="sr-only"
 						onChange={(e) => {
-							const f = e.target.files?.[0];
-							if (f) handleAdd(f);
+							const files = Array.from(e.target.files ?? []);
+							if (files.length > 0) handleAdd(files);
 							e.target.value = "";
 						}}
 					/>

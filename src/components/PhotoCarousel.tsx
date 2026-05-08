@@ -185,10 +185,7 @@ export function PhotoCarouselLightbox({
 			</div>
 
 			{/* ── Carousel ────────────────────────────────────────────────────── */}
-			<div
-				className="w-full max-w-3xl px-14"
-				onClick={(e) => e.stopPropagation()}
-			>
+			<div className="w-full max-w-3xl px-14">
 				<Carousel setApi={setApi} opts={{ startIndex: initialIndex }}>
 					<CarouselContent>
 						{images.map(({ url, alt }, i) => (
@@ -204,6 +201,7 @@ export function PhotoCarouselLightbox({
 									<img
 										src={url}
 										alt={alt}
+										onClick={(e) => e.stopPropagation()}
 										className={cn(
 											"rounded-xl shadow-2xl",
 											aspectRatio === "square"
@@ -218,8 +216,14 @@ export function PhotoCarouselLightbox({
 
 					{images.length > 1 && (
 						<>
-							<CarouselPrevious className="-left-10 border-white/20 bg-black/40 text-white hover:bg-black/60 hover:text-white disabled:opacity-30" />
-							<CarouselNext className="-right-10 border-white/20 bg-black/40 text-white hover:bg-black/60 hover:text-white disabled:opacity-30" />
+							<CarouselPrevious
+								className="-left-10 border-white/20 bg-black/40 text-white hover:bg-black/60 hover:text-white disabled:opacity-30"
+								onClick={(e) => e.stopPropagation()}
+							/>
+							<CarouselNext
+								className="-right-10 border-white/20 bg-black/40 text-white hover:bg-black/60 hover:text-white disabled:opacity-30"
+								onClick={(e) => e.stopPropagation()}
+							/>
 						</>
 					)}
 				</Carousel>
