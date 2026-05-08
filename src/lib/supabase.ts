@@ -9,6 +9,13 @@ import type {
 	AuthUser,
 } from "./types";
 
+export type DbRoomMember = {
+	room_id: string;
+	user_id: string;
+	role: "admin" | "member";
+	joined_at: string;
+};
+
 export type DbRoom = {
 	id: string;
 	name: string;
@@ -67,6 +74,14 @@ export type Database = {
 				Update: Partial<Omit<DbRoom, "id" | "created_at">>;
 				Relationships: [];
 			};
+			room_members: {
+				Row: DbRoomMember;
+				Insert: Omit<DbRoomMember, "joined_at"> & {
+					joined_at?: string;
+				};
+				Update: Partial<Pick<DbRoomMember, "role">>;
+				Relationships: [];
+			};
 			members: {
 				Row: DbMember;
 				Insert: Omit<DbMember, "created_at">;
@@ -103,7 +118,12 @@ export type Database = {
 			};
 		};
 		Views: Record<string, never>;
-		Functions: Record<string, never>;
+		Functions: {
+			join_room: {
+				Args: { p_room_id: string };
+				Returns: { found: boolean };
+			};
+		};
 	};
 };
 

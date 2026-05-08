@@ -68,8 +68,12 @@ export function RoomSetup() {
 		setIsCreating(true);
 		try {
 			await actions.createRoom(trimmed, currency);
-		} catch {
-			setCreateError("Failed to create room. Please try again.");
+		} catch (err) {
+			setCreateError(
+				err instanceof Error
+					? err.message
+					: "Failed to create room. Please try again.",
+			);
 		} finally {
 			setIsCreating(false);
 		}
@@ -145,7 +149,7 @@ export function RoomSetup() {
 			{/* ── Signed-in user bar ── */}
 			{state.user && (
 				<div className="fixed top-3 right-3 flex items-center gap-2 rounded-full border border-border/60 bg-background/80 backdrop-blur-md px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-					<span className="max-w-[140px] truncate">
+					<span className="max-w-35 truncate">
 						{state.user.fullName ?? state.user.email ?? "Guest"}
 					</span>
 					<button

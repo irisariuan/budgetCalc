@@ -2,6 +2,9 @@ import { useState } from "react";
 import { PlaneTakeoff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
+import { Turnstile } from "react-turnstile";
+
+const turnstileKey = import.meta.env.PUBLIC_TURNSTILE_KEY;
 
 // ─── Provider brand SVGs ──────────────────────────────────────────────────────
 
@@ -45,9 +48,10 @@ function GitHubIcon() {
 
 export function LoginScreen() {
 	const { actions } = useStore();
-	const [loading, setLoading] = useState<
-		"google" | "github" | "anon" | null
-	>(null);
+	const [loading, setLoading] = useState<"google" | "github" | "anon" | null>(
+		null,
+	);
+	const [captchaToken, setCaptchaToken] = useState<string>();
 
 	const handleGoogle = async () => {
 		setLoading("google");
@@ -62,8 +66,9 @@ export function LoginScreen() {
 	};
 
 	const handleAnon = async () => {
+		if (!captchaToken) return;
 		setLoading("anon");
-		await actions.signInAnonymously();
+		await actions.signInAnonymously(captchaToken);
 		setLoading(null);
 	};
 
@@ -133,17 +138,20 @@ export function LoginScreen() {
 					variant="ghost"
 					className="w-full text-muted-foreground"
 					onClick={handleAnon}
-					disabled={busy}
+					disabled={busy || !captchaToken}
 				>
 					{loading === "anon" && (
 						<Loader2 className="size-4 animate-spin" />
 					)}
 					Continue as Guest
 				</Button>
-
+				<Turnstile
+					sitekey={turnstileKey}
+					onSuccess={(token) => setCaptchaToken(token)}
+				/>
 				<p className="text-center text-xs text-muted-foreground mt-2 px-4">
-					Guest sessions are anonymous and stored on this device.
-					Sign in with a provider to access your rooms from anywhere.
+					Guest sessions are anonymous and stored on this device. Sign
+					in with a provider to access your rooms from anywhere.
 				</p>
 			</div>
 		</div>

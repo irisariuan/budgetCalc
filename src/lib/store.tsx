@@ -1,4 +1,4 @@
-import React, {
+import {
 	createContext,
 	useCallback,
 	useContext,
@@ -64,7 +64,7 @@ interface StoreActions {
 	leaveRoom: () => void;
 	signInWithGoogle: () => Promise<void>;
 	signInWithGitHub: () => Promise<void>;
-	signInAnonymously: () => Promise<void>;
+	signInAnonymously: (OAuthToken: string) => Promise<void>;
 	signOut: () => Promise<void>;
 	addMember: (name: string, color: string) => Promise<void>;
 	removeMember: (memberId: string) => Promise<void>;
@@ -681,9 +681,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 			},
 
 			// ── signInAnonymously ───────────────────────────────────────────────────────
-			signInAnonymously: async () => {
+			signInAnonymously: async (token: string) => {
 				if (!supabase) return;
-				const { error } = await supabase.auth.signInAnonymously();
+				const { error } = await supabase.auth.signInAnonymously({
+					options: { captchaToken: token },
+				});
+				console.log(error);
 				if (error)
 					dispatch({ type: "SET_ERROR", payload: error.message });
 			},
@@ -717,7 +720,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					if (error) {
 						dispatch({ type: "SET_ERROR", payload: error.message });
 						dispatch({ type: "SET_STATUS", payload: "error" });
-						return;
+						throw new Error(error.message);
+					}
+
+					// Register the creator as admin of this room.
+					const userId = stateRef.current.user?.id;
+					if (userId) {
+						await supabase.from("room_members").insert({
+							room_id: id,
+							user_id: userId,
+							role: "admin",
+						});
 					}
 
 					dispatch({ type: "SET_ROOM", payload: room });
@@ -750,9 +763,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				pushRoomToUrl(id);
 			},
 
-			// ── joinRoom ───────────────────────────────────────────────────────────
+			// ── joinRoom ─────────────────────────────────────────────────────────
 			joinRoom: async (roomId) => {
 				if (supabase) {
+					// join_room RPC runs SECURITY DEFINER so it can verify the room
+					// exists and add the caller to room_members even if RLS would
+					// otherwise block direct SELECT on the rooms table.
+					const { data: result, error: rpcError } =
+						await supabase.rpc("join_room", { p_room_id: roomId });
+					if (rpcError || !result?.found) return false;
+
+					// Now that we're a member, load the full room data.
 					const found = await loadRoomFromSupabase(roomId);
 					if (!found) return false;
 					subscribeToRoom(roomId);
