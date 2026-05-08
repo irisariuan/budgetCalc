@@ -2,12 +2,13 @@
 // PhotoCarouselLightbox – full-screen overlay with Carousel navigation
 // ReceiptGallery        – clickable thumbnail grid that opens the lightbox
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	X,
 	Square,
 	Maximize2,
 	ImageIcon,
+	ImagePlus,
 	ExternalLink,
 	Download,
 } from "lucide-react";
@@ -240,6 +241,11 @@ export interface ReceiptGalleryProps {
 	/** Optional alt texts, indexed to match `urls`. */
 	alts?: string[];
 	/**
+	 * Short labels shown as a bottom-left overlay on each thumbnail.
+	 * Only rendered when the gallery is in edit mode (onRemove / onReplace).
+	 */
+	labels?: string[];
+	/**
 	 * Initial display mode for the lightbox.
 	 * - "natural" – respects original aspect ratio (default)
 	 * - "square"  – crops to square
@@ -247,16 +253,38 @@ export interface ReceiptGalleryProps {
 	defaultAspectRatio?: AspectRatio;
 	/** Extra class names forwarded to the thumbnail grid wrapper. */
 	className?: string;
+	/**
+	 * Extra class names applied to every thumbnail container (e.g. `"h-32"`).
+	 * When a height is provided the image fills the container via `object-cover`.
+	 */
+	thumbnailClassName?: string;
+	// ── Edit-mode props ─────────────────────────────────────────────────────
+	/** When provided, a Remove button overlay is shown on each thumbnail. */
+	onRemove?: (index: number) => void;
+	/**
+	 * When provided, a Replace button overlay is shown and a hidden file input
+	 * is wired up per thumbnail.
+	 */
+	onReplace?: (file: File, index: number) => void;
+	/** MIME types accepted by the Replace file picker. */
+	acceptedTypes?: string[];
 }
 
 export function ReceiptGallery({
 	urls,
 	alts,
+	labels,
 	defaultAspectRatio = "natural",
 	className,
+	thumbnailClassName,
+	onRemove,
+	onReplace,
+	acceptedTypes,
 }: ReceiptGalleryProps) {
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 	const [activeIndex, setActiveIndex] = useState(0);
+	// Per-item refs for the hidden Replace file inputs (only used in edit mode)
+	const replaceInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
 	const images = urls.map((url, i) => ({
 		url,
@@ -279,34 +307,100 @@ export function ReceiptGallery({
 				)}
 			>
 				{images.map(({ url, alt }, i) => (
-					<button
+					// Container is the size anchor; overlays are positioned inside it.
+					<div
 						key={url}
-						type="button"
-						onClick={() => openAt(i)}
-						className="group relative overflow-hidden rounded-xl border border-border transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						aria-label={`View ${alt}`}
+						className={cn(
+							"group relative overflow-hidden rounded-xl border border-border transition-colors hover:border-primary/50",
+							thumbnailClassName,
+						)}
 					>
-						<img
-							src={url}
-							alt={alt}
-							className="w-full object-cover"
-							onError={(e) => {
-								const img = e.currentTarget;
-								img.style.display = "none";
-								const fallback =
-									img.nextSibling as HTMLElement | null;
-								if (fallback) fallback.style.display = "flex";
-							}}
-						/>
-						{/* Fallback icon shown when image fails to load */}
-						<span
-							className="h-24 w-full items-center justify-center text-muted-foreground"
-							style={{ display: "none" }}
+						{/* ── Lightbox trigger (fills the container) ─────────── */}
+						<button
+							type="button"
+							onClick={() => openAt(i)}
+							className={cn(
+								"relative block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+								thumbnailClassName && "h-full",
+							)}
+							aria-label={`View ${alt}`}
 						>
-							<ImageIcon className="size-6" />
-						</span>
-						<div className="absolute inset-0 rounded-xl bg-black/0 transition-colors group-hover:bg-black/20" />
-					</button>
+							<img
+								src={url}
+								alt={alt}
+								className={cn(
+									"block w-full object-cover",
+									thumbnailClassName && "h-full",
+								)}
+								onError={(e) => {
+									const img = e.currentTarget;
+									img.style.display = "none";
+									const fallback =
+										img.nextSibling as HTMLElement | null;
+									if (fallback)
+										fallback.style.display = "flex";
+								}}
+							/>
+							{/* Fallback icon shown when image fails to load */}
+							<span
+								className="h-24 w-full items-center justify-center text-muted-foreground"
+								style={{ display: "none" }}
+							>
+								<ImageIcon className="size-6" />
+							</span>
+							<div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+						</button>
+
+						{/* ── Edit-mode overlays ──────────────────────────────── */}
+
+						{/* Label — file name or alt text */}
+						{labels?.[i] != null && (
+							<div className="pointer-events-none absolute bottom-1.5 left-2 max-w-[55%] truncate text-xs font-medium text-white/80">
+								{labels[i]}
+							</div>
+						)}
+
+						{/* Remove */}
+						{onRemove && (
+							<button
+								type="button"
+								onClick={() => onRemove(i)}
+								className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-background/90 text-foreground shadow transition-colors hover:bg-background"
+								aria-label={`Remove ${alt}`}
+							>
+								<X className="size-3.5" />
+							</button>
+						)}
+
+						{/* Replace */}
+						{onReplace && (
+							<>
+								<button
+									type="button"
+									onClick={() =>
+										replaceInputRefs.current[i]?.click()
+									}
+									className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground shadow transition-colors hover:bg-background"
+								>
+									<ImagePlus className="size-3" />
+									Replace
+								</button>
+								<input
+									ref={(el) => {
+										replaceInputRefs.current[i] = el;
+									}}
+									type="file"
+									accept={acceptedTypes?.join(",")}
+									className="sr-only"
+									onChange={(e) => {
+										const f = e.target.files?.[0];
+										if (f) onReplace(f, i);
+										e.target.value = "";
+									}}
+								/>
+							</>
+						)}
+					</div>
 				))}
 			</div>
 

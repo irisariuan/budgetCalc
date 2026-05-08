@@ -1,8 +1,9 @@
 // ─── Receipt Editor (inline uploader for edit form) ───────────────────────────
 
-import { X, ImagePlus, AlertCircle } from "lucide-react";
+import { AlertCircle, ImagePlus } from "lucide-react";
 import { useRef, useState } from "react";
 import Compressor from "compressorjs";
+import { ReceiptGallery } from "@/components/PhotoCarousel";
 
 const MAX_FILE = 10;
 const MAX_FILE_SIZE_MB = 5;
@@ -25,7 +26,6 @@ export default function ReceiptEditor({
 }: ReceiptEditorProps) {
 	// Separate refs: one per existing item (for Replace) + one for the Add zone
 	const addInputRef = useRef<HTMLInputElement>(null);
-	const itemInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [dragging, setDragging] = useState(false);
 
@@ -75,11 +75,14 @@ export default function ReceiptEditor({
 
 		// Compress the image
 		const compressedFile = await compressImage(f);
-		onChange([...receipts, {
-			id: crypto.randomUUID(),
-			file: compressedFile,
-			url: URL.createObjectURL(compressedFile)
-		}]);
+		onChange([
+			...receipts,
+			{
+				id: crypto.randomUUID(),
+				file: compressedFile,
+				url: URL.createObjectURL(compressedFile),
+			},
+		]);
 	};
 
 	const handleReplace = async (f: File, index: number) => {
@@ -98,7 +101,7 @@ export default function ReceiptEditor({
 		updated[index] = {
 			id: crypto.randomUUID(), // Generate new UUID for replaced receipt
 			file: compressedFile,
-			url: URL.createObjectURL(compressedFile)
+			url: URL.createObjectURL(compressedFile),
 		};
 		onChange(updated);
 	};
@@ -116,65 +119,17 @@ export default function ReceiptEditor({
 		<div className="space-y-2">
 			{/* Thumbnail grid */}
 			{receipts.length > 0 && (
-				<div
-					className={`grid gap-2 ${receipts.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
-				>
-					{receipts.map((receipt, index) => (
-						<div
-							key={receipt.id}
-							className="relative rounded-xl overflow-hidden border border-border h-32 group"
-						>
-							<img
-								src={receipt.url}
-								alt={`Receipt ${index + 1}`}
-								className="w-full h-full object-cover"
-							/>
-							<div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
-
-							{/* Remove */}
-							<button
-								type="button"
-								onClick={() => handleRemove(index)}
-								className="absolute top-1.5 right-1.5 flex items-center justify-center size-6 rounded-full bg-background/90 text-foreground hover:bg-background transition-colors shadow"
-								aria-label="Remove receipt"
-							>
-								<X className="size-3.5" />
-							</button>
-
-							{/* File name */}
-							<div className="absolute bottom-1.5 left-2 text-xs text-white/80 font-medium truncate max-w-[55%]">
-								{receipt.file?.name ?? "Uploaded receipt"}
-							</div>
-
-							{/* Replace — uses per-item ref */}
-							<button
-								type="button"
-								onClick={() =>
-									itemInputRefs.current[index]?.click()
-								}
-								className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-background transition-colors shadow"
-							>
-								<ImagePlus className="size-3" />
-								Replace
-							</button>
-
-							{/* Per-item hidden file input */}
-							<input
-								ref={(el) => {
-									itemInputRefs.current[index] = el;
-								}}
-								type="file"
-								accept={ACCEPTED_TYPES.join(",")}
-								className="sr-only"
-								onChange={(e) => {
-									const f = e.target.files?.[0];
-									if (f) handleReplace(f, index);
-									e.target.value = "";
-								}}
-							/>
-						</div>
-					))}
-				</div>
+				<ReceiptGallery
+					urls={receipts.map((r) => r.url)}
+					alts={receipts.map((_, i) => `Receipt ${i + 1}`)}
+					labels={receipts.map(
+						(r) => r.file?.name ?? "Uploaded receipt",
+					)}
+					thumbnailClassName="h-32"
+					onRemove={handleRemove}
+					onReplace={handleReplace}
+					acceptedTypes={ACCEPTED_TYPES}
+				/>
 			)}
 
 			{/* Add zone */}
