@@ -227,18 +227,3 @@ export async function deleteReceiptFile(publicUrl: string): Promise<void> {
 		// best-effort
 	}
 }
-
-/** Converts Files to a base64 data-URL (used in offline/localStorage mode). */
-export function filesToDataUrl(files: File[]): Promise<string[]> {
-	return Promise.all(
-		files.map(
-			(file) =>
-				new Promise<string>((resolve, reject) => {
-					const reader = new FileReader();
-					reader.onload = () => resolve(reader.result as string);
-					reader.onerror = reject;
-					reader.readAsDataURL(file);
-				}),
-		),
-	);
-}
