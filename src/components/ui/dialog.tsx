@@ -104,7 +104,7 @@ function DialogFooter({
 		<div
 			data-slot="dialog-footer"
 			className={cn(
-				"-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end sticky bottom-0",
+				"-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
 				className,
 			)}
 			{...props}
@@ -127,7 +127,7 @@ function DialogTitle({
 		<DialogPrimitive.Title
 			data-slot="dialog-title"
 			className={cn(
-				"font-heading text-base leading-none font-medium sticky top-0",
+				"font-heading text-base leading-none font-medium",
 				className,
 			)}
 			{...props}
