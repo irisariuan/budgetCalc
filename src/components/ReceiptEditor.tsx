@@ -9,6 +9,7 @@ const MAX_FILE_SIZE_MB = 5;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 
 export interface Receipt {
+	id: string; // UUID to track each receipt uniquely
 	file?: File;
 	url: string;
 }
@@ -74,7 +75,11 @@ export default function ReceiptEditor({
 
 		// Compress the image
 		const compressedFile = await compressImage(f);
-		onChange([...receipts, { file: compressedFile, url: URL.createObjectURL(compressedFile) }]);
+		onChange([...receipts, {
+			id: crypto.randomUUID(),
+			file: compressedFile,
+			url: URL.createObjectURL(compressedFile)
+		}]);
 	};
 
 	const handleReplace = async (f: File, index: number) => {
@@ -90,7 +95,11 @@ export default function ReceiptEditor({
 
 		// Compress the image
 		const compressedFile = await compressImage(f);
-		updated[index] = { file: compressedFile, url: URL.createObjectURL(compressedFile) };
+		updated[index] = {
+			id: crypto.randomUUID(), // Generate new UUID for replaced receipt
+			file: compressedFile,
+			url: URL.createObjectURL(compressedFile)
+		};
 		onChange(updated);
 	};
 
@@ -112,7 +121,7 @@ export default function ReceiptEditor({
 				>
 					{receipts.map((receipt, index) => (
 						<div
-							key={receipt.url}
+							key={receipt.id}
 							className="relative rounded-xl overflow-hidden border border-border h-32 group"
 						>
 							<img

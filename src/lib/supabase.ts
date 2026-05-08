@@ -179,26 +179,22 @@ const RECEIPTS_BUCKET = "receipts";
 /**
  * Uploads receipt images to Supabase Storage.
  * Returns the public URL, or null if offline / upload failed.
- * @param startIndex - Starting index for filename generation (to avoid collisions with existing files)
  */
 export async function uploadReceiptFile(
 	roomId: string,
 	expenseId: string,
-	files: File[],
-	startIndex: number = 0,
-): Promise<string[] | null> {
+	receipts: Array<{ id: string; file: File }>,
+): Promise<Array<{ id: string; url: string }> | null> {
 	if (!supabase) return null;
-	const urls = [];
-	for (let i = 0; i < files.length; i++) {
-		const file = files[i];
-		const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-		// Use index to ensure unique filenames for multiple receipts
-		const fileIndex = startIndex + i;
-		const path = `${roomId}/${expenseId}_${fileIndex}.${ext}`;
+	const results = [];
+	for (const receipt of receipts) {
+		const ext = receipt.file.name.split(".").pop()?.toLowerCase() || "jpg";
+		// Use receipt UUID for unique filename
+		const path = `${roomId}/${expenseId}_${receipt.id}.${ext}`;
 
 		const { error } = await supabase.storage
 			.from(RECEIPTS_BUCKET)
-			.upload(path, file, { upsert: true, contentType: file.type });
+			.upload(path, receipt.file, { upsert: true, contentType: receipt.file.type });
 		if (error) {
 			console.error("Receipt upload failed:", error.message);
 			continue;
@@ -206,10 +202,10 @@ export async function uploadReceiptFile(
 		const {
 			data: { publicUrl },
 		} = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(path);
-		urls.push(publicUrl);
+		results.push({ id: receipt.id, url: publicUrl });
 	}
 
-	return urls;
+	return results;
 }
 
 /**

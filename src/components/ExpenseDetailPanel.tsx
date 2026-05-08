@@ -367,7 +367,10 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 				source: expense.source,
 				paidById: expense.paidById,
 				splitAmong: expense.splitAmong,
-				receipts: expense.receiptUrl?.map((url) => ({ url })) ?? [],
+				receipts: expense.receiptUrl?.map((url) => ({
+					id: crypto.randomUUID(), // Generate new UUID for copied receipts
+					url
+				})) ?? [],
 			});
 			onClose();
 			toast.success("Expense duplicated");
@@ -605,7 +608,10 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 		setSource(expense.source);
 		setPaidById(expense.paidById ?? "");
 		setSplitAmong(expense.splitAmong);
-		setReceipts(expense.receiptUrl?.map((v) => ({ url: v })) || []);
+		setReceipts(expense.receiptUrl?.map((url) => ({
+			id: crypto.randomUUID(), // Generate UUID for existing receipts
+			url
+		})) || []);
 		setErrors({});
 	}, [expense.id]);
 

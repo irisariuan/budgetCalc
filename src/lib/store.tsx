@@ -779,34 +779,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				let receiptUrls: string[] = [];
 				if (supabase && expenseData.receipts.length > 0) {
 					// Separate existing URLs from new files
-					const existingUrls: string[] = [];
-					const filesToUpload: File[] = [];
+					const existingReceipts: Array<{ id: string; url: string }> = [];
+					const newReceipts: Array<{ id: string; file: File }> = [];
 
 					for (const receipt of expenseData.receipts) {
 						if (receipt.file) {
 							// New file to upload
-							filesToUpload.push(receipt.file);
+							newReceipts.push({ id: receipt.id, file: receipt.file });
 						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
 							// Existing URL from database (when copying)
-							existingUrls.push(receipt.url);
+							existingReceipts.push({ id: receipt.id, url: receipt.url });
 						}
 					}
 
 					// Start with existing URLs
-					receiptUrls = [...existingUrls];
+					receiptUrls = existingReceipts.map(r => r.url);
 
-					// Upload new files with correct starting index
-					if (filesToUpload.length > 0) {
-						// Start index after existing receipts to avoid filename collisions
-						const startIndex = existingUrls.length;
-						const uploadedUrls = await uploadReceiptFile(
+					// Upload new files
+					if (newReceipts.length > 0) {
+						const uploadedReceipts = await uploadReceiptFile(
 							room.id,
 							id,
-							filesToUpload,
-							startIndex,
+							newReceipts,
 						);
-						if (uploadedUrls) {
-							receiptUrls = [...receiptUrls, ...uploadedUrls];
+						if (uploadedReceipts) {
+							receiptUrls = [...receiptUrls, ...uploadedReceipts.map(r => r.url)];
 						}
 					}
 				}
@@ -916,21 +913,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 				if (supabase) {
 					// Identify existing URLs vs new files
-					const existingUrls: string[] = [];
-					const newFiles: File[] = [];
+					const existingReceipts: Array<{ id: string; url: string }> = [];
+					const newReceipts: Array<{ id: string; file: File }> = [];
 
 					for (const receipt of data.receipts) {
 						if (receipt.file) {
 							// New file to upload
-							newFiles.push(receipt.file);
+							newReceipts.push({ id: receipt.id, file: receipt.file });
 						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
 							// Existing URL from database
-							existingUrls.push(receipt.url);
+							existingReceipts.push({ id: receipt.id, url: receipt.url });
 						}
 					}
 
 					// Delete receipts that were removed
 					if (existing.receiptUrl) {
+						const existingUrls = existingReceipts.map(r => r.url);
 						for (const oldUrl of existing.receiptUrl) {
 							if (!existingUrls.includes(oldUrl)) {
 								await deleteReceiptFile(oldUrl);
@@ -938,23 +936,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						}
 					}
 
-					// Upload new files with correct starting index
-					if (newFiles.length > 0) {
-						// Start index after existing receipts to avoid filename collisions
-						const startIndex = existingUrls.length;
-						const uploadedUrls = await uploadReceiptFile(
+					// Upload new files
+					if (newReceipts.length > 0) {
+						const uploadedReceipts = await uploadReceiptFile(
 							room.id,
 							expenseId,
-							newFiles,
-							startIndex,
+							newReceipts,
 						);
-						if (uploadedUrls) {
-							receiptUrls = [...existingUrls, ...uploadedUrls];
+						if (uploadedReceipts) {
+							receiptUrls = [...existingReceipts.map(r => r.url), ...uploadedReceipts.map(r => r.url)];
 						} else {
-							receiptUrls = existingUrls;
+							receiptUrls = existingReceipts.map(r => r.url);
 						}
 					} else {
-						receiptUrls = existingUrls;
+						receiptUrls = existingReceipts.map(r => r.url);
 					}
 				}
 
