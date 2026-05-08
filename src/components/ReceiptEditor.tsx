@@ -21,144 +21,183 @@ export default function ReceiptEditor({
 	receipts,
 	onChange,
 }: ReceiptEditorProps) {
-	const inputRef = useRef<HTMLInputElement>(null);
+	// Separate refs: one per existing item (for Replace) + one for the Add zone
+	const addInputRef = useRef<HTMLInputElement>(null);
+	const itemInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [dragging, setDragging] = useState(false);
 
-	const handleNewFile = (f: File) => {
+	const validate = (f: File): string | null => {
+		if (!ACCEPTED_TYPES.includes(f.type))
+			return "Only JPEG, PNG, WebP, or HEIC images are allowed.";
+		if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024)
+			return `File must be under ${MAX_FILE_SIZE_MB} MB.`;
+		return null;
+	};
+
+	const handleAdd = (f: File) => {
 		setError(null);
-		if (!ACCEPTED_TYPES.includes(f.type)) {
-			setError("Only JPEG, PNG, WebP, or HEIC images are allowed.");
-			return;
-		}
-		if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-			setError(`File must be under ${MAX_FILE_SIZE_MB} MB.`);
+		const err = validate(f);
+		if (err) {
+			setError(err);
 			return;
 		}
 		if (receipts.length >= MAX_FILE) {
 			setError(`You can only upload up to ${MAX_FILE} receipts.`);
 			return;
 		}
-		const url = URL.createObjectURL(f);
-		onChange([...receipts, { file: f, url }]);
+		onChange([...receipts, { file: f, url: URL.createObjectURL(f) }]);
 	};
-	const handleFile = (f: File, index: number) => {
+
+	const handleReplace = (f: File, index: number) => {
 		setError(null);
-		if (!ACCEPTED_TYPES.includes(f.type)) {
-			setError("Only JPEG, PNG, WebP, or HEIC images are allowed.");
+		const err = validate(f);
+		if (err) {
+			setError(err);
 			return;
 		}
-		if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-			setError(`File must be under ${MAX_FILE_SIZE_MB} MB.`);
-			return;
-		}
-		const url = URL.createObjectURL(f);
 		const updated = [...receipts];
-		const selected = updated[index];
-		if (selected?.url.startsWith("blob:"))
-			URL.revokeObjectURL(selected.url);
-		updated[index] = { file: f, url };
+		const old = updated[index];
+		if (old?.url.startsWith("blob:")) URL.revokeObjectURL(old.url);
+		updated[index] = { file: f, url: URL.createObjectURL(f) };
 		onChange(updated);
 	};
 
 	const handleRemove = (index: number) => {
-		const selected = receipts[index];
-		if (selected?.url.startsWith("blob:"))
-			URL.revokeObjectURL(selected.url);
+		const old = receipts[index];
+		if (old?.url.startsWith("blob:")) URL.revokeObjectURL(old.url);
 		onChange(receipts.filter((_, i) => i !== index));
 		setError(null);
 	};
 
-	const uploadPart = (
-		<div className="space-y-1.5">
-			<button
-				type="button"
-				onClick={() => inputRef.current?.click()}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setDragging(true);
-				}}
-				onDragLeave={() => setDragging(false)}
-				onDrop={(e) => {
-					e.preventDefault();
-					setDragging(false);
-					const f = e.dataTransfer?.files[0];
-					if (f) handleNewFile(f);
-				}}
-				className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed h-24 transition-colors text-sm ${
-					dragging
-						? "border-primary bg-primary/5 text-primary"
-						: "border-input text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
-				}`}
-			>
-				<ImagePlus className="size-5 opacity-60" />
-				<span>Click or drag to attach receipt</span>
-				<span className="text-xs opacity-60">
-					JPEG, PNG, WebP (max {MAX_FILE_SIZE_MB} MB)
-				</span>
-			</button>
+	const canAdd = receipts.length < MAX_FILE;
+
+	return (
+		<div className="space-y-2">
+			{/* Thumbnail grid */}
+			{receipts.length > 0 && (
+				<div
+					className={`grid gap-2 ${receipts.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+				>
+					{receipts.map((receipt, index) => (
+						<div
+							key={receipt.url}
+							className="relative rounded-xl overflow-hidden border border-border h-32 group"
+						>
+							<img
+								src={receipt.url}
+								alt={`Receipt ${index + 1}`}
+								className="w-full h-full object-cover"
+							/>
+							<div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
+
+							{/* Remove */}
+							<button
+								type="button"
+								onClick={() => handleRemove(index)}
+								className="absolute top-1.5 right-1.5 flex items-center justify-center size-6 rounded-full bg-background/90 text-foreground hover:bg-background transition-colors shadow"
+								aria-label="Remove receipt"
+							>
+								<X className="size-3.5" />
+							</button>
+
+							{/* File name */}
+							<div className="absolute bottom-1.5 left-2 text-xs text-white/80 font-medium truncate max-w-[55%]">
+								{receipt.file?.name ?? "Uploaded receipt"}
+							</div>
+
+							{/* Replace — uses per-item ref */}
+							<button
+								type="button"
+								onClick={() =>
+									itemInputRefs.current[index]?.click()
+								}
+								className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-background transition-colors shadow"
+							>
+								<ImagePlus className="size-3" />
+								Replace
+							</button>
+
+							{/* Per-item hidden file input */}
+							<input
+								ref={(el) => {
+									itemInputRefs.current[index] = el;
+								}}
+								type="file"
+								accept={ACCEPTED_TYPES.join(",")}
+								className="sr-only"
+								onChange={(e) => {
+									const f = e.target.files?.[0];
+									if (f) handleReplace(f, index);
+									e.target.value = "";
+								}}
+							/>
+						</div>
+					))}
+				</div>
+			)}
+
+			{/* Add zone */}
+			{canAdd && (
+				<div className="space-y-1.5">
+					<button
+						type="button"
+						onClick={() => addInputRef.current?.click()}
+						onDragOver={(e) => {
+							e.preventDefault();
+							setDragging(true);
+						}}
+						onDragLeave={() => setDragging(false)}
+						onDrop={(e) => {
+							e.preventDefault();
+							setDragging(false);
+							const f = e.dataTransfer?.files[0];
+							if (f) handleAdd(f);
+						}}
+						className={`w-full flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed h-24 transition-colors text-sm ${
+							dragging
+								? "border-primary bg-primary/5 text-primary"
+								: "border-input text-muted-foreground hover:border-primary/50 hover:bg-muted/40"
+						}`}
+					>
+						<ImagePlus className="size-5 opacity-60" />
+						<span>
+							{receipts.length === 0
+								? "Click or drag to attach receipt"
+								: "Click or drag to add another"}
+						</span>
+						<span className="text-xs opacity-60">
+							JPEG, PNG, WebP (max {MAX_FILE_SIZE_MB} MB)
+						</span>
+					</button>
+					<input
+						ref={addInputRef}
+						type="file"
+						accept={ACCEPTED_TYPES.join(",")}
+						className="sr-only"
+						onChange={(e) => {
+							const f = e.target.files?.[0];
+							if (f) handleAdd(f);
+							e.target.value = "";
+						}}
+					/>
+				</div>
+			)}
+
+			{/* Error */}
 			{error && (
 				<div className="flex items-center gap-1.5 text-sm text-destructive">
 					<AlertCircle className="size-3.5 shrink-0" />
 					{error}
 				</div>
 			)}
-			<input
-				ref={inputRef}
-				type="file"
-				accept={ACCEPTED_TYPES.join(",")}
-				className="sr-only"
-				onChange={(e) => {
-					const f = e.target.files?.[0];
-					if (f) handleNewFile(f);
-					e.target.value = "";
-				}}
-			/>
-		</div>
-	);
 
-	return (
-		<>
-			{receipts.map((receipt, index) => (
-				<div className="relative rounded-xl overflow-hidden border border-border h-36">
-					<img
-						src={receipt.url}
-						alt="Receipt"
-						className="w-full h-full object-cover"
-					/>
-					<div className="absolute inset-0 bg-black/20" />
-					<button
-						type="button"
-						onClick={() => handleRemove(index)}
-						className="absolute top-1.5 right-1.5 flex items-center justify-center size-6 rounded-full bg-background/90 text-foreground hover:bg-background transition-colors shadow"
-						aria-label="Remove receipt"
-					>
-						<X className="size-3.5" />
-					</button>
-					<div className="absolute bottom-1.5 left-2 text-xs text-white/80 font-medium truncate max-w-[80%]">
-						{receipt.file?.name ?? "Uploaded receipt"}
-					</div>
-					<button
-						type="button"
-						onClick={() => inputRef.current?.click()}
-						className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-background/90 px-2 py-0.5 text-xs font-medium text-foreground hover:bg-background transition-colors shadow"
-					>
-						<ImagePlus className="size-3" />
-						Replace
-					</button>
-					<input
-						ref={inputRef}
-						type="file"
-						accept={ACCEPTED_TYPES.join(",")}
-						className="sr-only"
-						onChange={(e) => {
-							const f = e.target.files?.[0];
-							if (f) handleFile(f, index);
-							e.target.value = "";
-						}}
-					/>
-				</div>
-			))}
-		</>
+			{/* Max reached note */}
+			{!canAdd && (
+				<p className="text-xs text-muted-foreground">
+					Maximum of {MAX_FILE} photos reached.
+				</p>
+			)}
+		</div>
 	);
 }

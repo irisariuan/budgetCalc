@@ -50,7 +50,7 @@ export type DbExpense = {
 	source: "group" | "personal";
 	paid_by_id: string | null;
 	split_among: string[];
-	receipt_url: string[];
+	receipt_url: string[] | null;
 	created_at: string;
 };
 

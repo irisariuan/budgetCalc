@@ -22,6 +22,7 @@ import {
 	ImagePlus,
 	AlertCircle,
 	Loader2,
+	Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
@@ -332,6 +333,7 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 	const { state, actions } = useStore();
 	const currency = state.room?.currency ?? "USD";
 	const [deleting, setDeleting] = useState(false);
+	const [copying, setCopying] = useState(false);
 
 	const paidBy = state.members.find((m) => m.id === expense.paidById);
 	const splitMembers = expense.splitAmong
@@ -354,20 +356,37 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 		});
 	};
 
+	const handleCopy = async () => {
+		if (copying) return;
+		setCopying(true);
+		try {
+			await actions.addExpense({
+				description: expense.description,
+				amount: expense.amount,
+				date: expense.date,
+				source: expense.source,
+				paidById: expense.paidById,
+				splitAmong: expense.splitAmong,
+				receipts: expense.receiptUrl?.map((url) => ({ url })) ?? [],
+			});
+			onClose();
+			toast.success("Expense duplicated");
+		} finally {
+			setCopying(false);
+		}
+	};
+
 	return (
 		<div className="flex flex-col gap-5 px-4 pb-6">
 			{/* Hero */}
 			<div className="flex items-start gap-3 pt-1">
 				<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-muted overflow-hidden">
-					{expense.receiptUrl ? (
-						expense.receiptUrl.map((url) => (
-							<img
-								key={url}
-								src={url}
-								alt="Receipt"
-								className="h-full w-full object-cover"
-							/>
-						))
+					{expense.receiptUrl && expense.receiptUrl.length > 0 ? (
+						<img
+							src={expense.receiptUrl[0]}
+							alt="Receipt"
+							className="h-full w-full object-cover"
+						/>
 					) : (
 						<ReceiptIcon className="size-5 text-muted-foreground" />
 					)}
@@ -489,40 +508,68 @@ function ExpenseViewContent({ expense, onClose }: ViewContentProps) {
 				)}
 			</div>
 
-			{/* Full receipt */}
-			{expense.receiptUrl && (
+			{/* Full receipts */}
+			{expense.receiptUrl && expense.receiptUrl.length > 0 && (
 				<>
 					<Separator />
 					<div className="flex flex-col gap-2">
 						<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-							Receipt Photo
+							Receipt{expense.receiptUrl.length > 1 ? "s" : ""}
+							{expense.receiptUrl.length > 1 && (
+								<span className="ml-1 normal-case font-normal">
+									({expense.receiptUrl.length})
+								</span>
+							)}
 						</span>
-						{expense.receiptUrl.map((url) => (
-							<img
-								key={url}
-								src={url}
-								alt="Receipt"
-								className="h-full w-full object-cover"
-							/>
-						))}
+						<div
+							className={`grid gap-2 ${
+								expense.receiptUrl.length === 1
+									? "grid-cols-1"
+									: "grid-cols-2"
+							}`}
+						>
+							{expense.receiptUrl.map((url, i) => (
+								<img
+									key={url}
+									src={url}
+									alt={`Receipt ${i + 1}`}
+									className="w-full rounded-xl border border-border object-cover"
+								/>
+							))}
+						</div>
 					</div>
 				</>
 			)}
 
 			<Separator />
-			<Button
-				variant="destructive"
-				className="w-full"
-				onClick={handleDelete}
-				disabled={deleting}
-			>
-				{deleting ? (
-					<Loader2 className="size-4 animate-spin" />
-				) : (
-					<Trash2 className="size-4" />
-				)}
-				Delete Expense
-			</Button>
+			<div className="flex gap-2">
+				<Button
+					variant="outline"
+					className="flex-1"
+					onClick={handleCopy}
+					disabled={copying || deleting}
+				>
+					{copying ? (
+						<Loader2 className="size-4 animate-spin" />
+					) : (
+						<Copy className="size-4" />
+					)}
+					Duplicate
+				</Button>
+				<Button
+					variant="destructive"
+					className="flex-1"
+					onClick={handleDelete}
+					disabled={deleting || copying}
+				>
+					{deleting ? (
+						<Loader2 className="size-4 animate-spin" />
+					) : (
+						<Trash2 className="size-4" />
+					)}
+					Delete
+				</Button>
+			</div>
 		</div>
 	);
 }
@@ -558,7 +605,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 		setSource(expense.source);
 		setPaidById(expense.paidById ?? "");
 		setSplitAmong(expense.splitAmong);
-		setReceipts(expense.receiptUrl.map((v) => ({ url: v })));
+		setReceipts(expense.receiptUrl?.map((v) => ({ url: v })) || []);
 		setErrors({});
 	}, [expense.id]);
 

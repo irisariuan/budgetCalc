@@ -905,8 +905,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 				// Handle receipt changes
 
-				//todo
-
 				const updated: Expense = {
 					...existing,
 					description: data.description,
@@ -915,7 +913,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					source: data.source,
 					paidById: data.paidById,
 					splitAmong: data.splitAmong,
-					// receiptUrl:
+					receiptUrl: data.receipts.map(v => v.url)
 				};
 
 				if (supabase) {
