@@ -21,6 +21,81 @@ function todayStr(): string {
 	return new Date().toISOString().split("T")[0];
 }
 
+// ─── Granularity ──────────────────────────────────────────────────────────────
+
+export type Granularity = "day" | "week" | "month";
+
+/** Extract the YYYY-MM-DD part from either "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm". */
+export function toDateOnly(d: string): string {
+	return d.slice(0, 10);
+}
+
+/**
+ * Return the Monday (start of ISO week) for a YYYY-MM-DD string as YYYY-MM-DD.
+ */
+export function weekBucket(dateStr: string): string {
+	const d = new Date(`${toDateOnly(dateStr)}T00:00:00Z`);
+	const day = d.getUTCDay(); // 0 = Sunday
+	const diff = (day + 6) % 7; // days to subtract to reach Monday
+	d.setUTCDate(d.getUTCDate() - diff);
+	return d.toISOString().slice(0, 10);
+}
+
+/** Return the first of the month for a YYYY-MM-DD string as YYYY-MM-DD. */
+export function monthBucket(dateStr: string): string {
+	return `${toDateOnly(dateStr).slice(0, 7)}-01`;
+}
+
+/**
+ * Map a date string to its bucket key for the given granularity.
+ * "day"   → "YYYY-MM-DD"
+ * "week"  → Monday of that week as "YYYY-MM-DD"
+ * "month" → "YYYY-MM-01"
+ */
+export function getBucketKey(dateStr: string, gran: Granularity): string {
+	const d = toDateOnly(dateStr);
+	if (gran === "week") return weekBucket(d);
+	if (gran === "month") return monthBucket(d);
+	return d;
+}
+
+/**
+ * Human-readable XAxis label for a bucket key.
+ * "day"   → "Jan 15"
+ * "week"  → "Jan 15 – 21"   (Mon → Sun of that week)
+ * "month" → "Jan 2024"
+ */
+export function formatBucketLabel(key: string, gran: Granularity): string {
+	const d = new Date(`${key}T00:00:00Z`);
+	if (gran === "month") {
+		return d.toLocaleDateString("en-US", {
+			month: "short",
+			year: "numeric",
+			timeZone: "UTC",
+		});
+	}
+	if (gran === "week") {
+		const end = new Date(d);
+		end.setUTCDate(end.getUTCDate() + 6);
+		const startStr = d.toLocaleDateString("en-US", {
+			month: "short",
+			day: "numeric",
+			timeZone: "UTC",
+		});
+		const endStr = end.toLocaleDateString("en-US", {
+			day: "numeric",
+			timeZone: "UTC",
+		});
+		return `${startStr} – ${endStr}`;
+	}
+	// day
+	return d.toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+}
+
 // ─── Budget chart ─────────────────────────────────────────────────────────────
 
 /**
@@ -34,6 +109,7 @@ function todayStr(): string {
 export function generateBudgetChartData(
 	budgetAdditions: BudgetAddition[],
 	expenses: Expense[],
+	granularity: Granularity = "day",
 ): BudgetDataPoint[] {
 	// Accumulate daily deltas: date → { added, spent }
 	const dailyMap = new Map<string, { added: number; spent: number }>();
@@ -53,25 +129,36 @@ export function generateBudgetChartData(
 
 	const sortedDates = Array.from(dailyMap.keys()).sort();
 
-	// Empty state: return a single all-zero anchor point.
 	if (sortedDates.length === 0) {
 		return [{ date: todayStr(), added: 0, spent: 0, remaining: 0 }];
 	}
 
-	// Prepend a zero anchor the day before the first event.
+	// ── Bucket aggregation ──────────────────────────────────────────────────
+	const bucketMap = new Map<string, { added: number; spent: number }>();
+	for (const date of sortedDates) {
+		const key = getBucketKey(date, granularity);
+		const existing = bucketMap.get(key) ?? { added: 0, spent: 0 };
+		const daily = dailyMap.get(date)!;
+		existing.added += daily.added;
+		existing.spent += daily.spent;
+		bucketMap.set(key, existing);
+	}
+
+	const sortedBuckets = Array.from(bucketMap.keys()).sort();
+
 	const result: BudgetDataPoint[] = [
-		{ date: dayBefore(sortedDates[0]), added: 0, spent: 0, remaining: 0 },
+		{ date: dayBefore(sortedBuckets[0]), added: 0, spent: 0, remaining: 0 },
 	];
 
 	let cumulativeAdded = 0;
 	let cumulativeSpent = 0;
 
-	for (const date of sortedDates) {
-		const { added, spent } = dailyMap.get(date)!;
+	for (const key of sortedBuckets) {
+		const { added, spent } = bucketMap.get(key)!;
 		cumulativeAdded += added;
 		cumulativeSpent += spent;
 		result.push({
-			date,
+			date: key,
 			added: cumulativeAdded,
 			spent: cumulativeSpent,
 			remaining: cumulativeAdded - cumulativeSpent,
@@ -101,6 +188,7 @@ export function generateBalanceChartData(
 	members: Member[],
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
+	granularity: Granularity = "day",
 ): BalanceDataPoint[] {
 	const personalExpenses = expenses.filter((e) => e.source === "personal");
 
@@ -131,48 +219,53 @@ export function generateBalanceChartData(
 		dailyAdjMap.set(adj.date, list);
 	}
 
-	// Merge all event dates into a single sorted list.
+	// Merge all event dates and sort
 	const allDates = Array.from(
 		new Set([...dailyExpenseMap.keys(), ...dailyAdjMap.keys()]),
 	).sort();
 
-	// Running balances for every known member, initialised to zero.
+	// ── Bucket aggregation ──────────────────────────────────────────────────
+	// Group dates into their bucket, preserving day-level maps for processing
+	const bucketDates = new Map<string, string[]>(); // bucketKey → list of dates
+	for (const date of allDates) {
+		const key = getBucketKey(date, granularity);
+		const list = bucketDates.get(key) ?? [];
+		list.push(date);
+		bucketDates.set(key, list);
+	}
+	const sortedBuckets = Array.from(bucketDates.keys()).sort();
+
 	const balances: Record<string, number> = {};
 	for (const m of members) balances[m.id] = 0;
 
-	// Prepend a zero anchor the day before the earliest event.
-	const result: BalanceDataPoint[] = [buildZeroPoint(dayBefore(allDates[0]))];
+	const result: BalanceDataPoint[] = [
+		buildZeroPoint(dayBefore(sortedBuckets[0])),
+	];
 
-	for (const date of allDates) {
-		const dayExpenses = dailyExpenseMap.get(date) ?? [];
+	for (const bucketKey of sortedBuckets) {
+		const datesInBucket = bucketDates.get(bucketKey)!;
 
-		for (const expense of dayExpenses) {
-			if (expense.splitAmong.length === 0) continue;
-
-			// The payer is owed the full amount back.
-			if (expense.paidById !== null && expense.paidById in balances) {
-				balances[expense.paidById] += expense.amount;
+		for (const date of datesInBucket) {
+			const dayExpenses = dailyExpenseMap.get(date) ?? [];
+			for (const expense of dayExpenses) {
+				if (expense.splitAmong.length === 0) continue;
+				if (expense.paidById !== null && expense.paidById in balances) {
+					balances[expense.paidById] += expense.amount;
+				}
+				const share = expense.amount / expense.splitAmong.length;
+				for (const memberId of expense.splitAmong) {
+					if (memberId in balances) balances[memberId] -= share;
+				}
 			}
-
-			// Each person in splitAmong owes their share.
-			const share = expense.amount / expense.splitAmong.length;
-			for (const memberId of expense.splitAmong) {
-				if (memberId in balances) {
-					balances[memberId] -= share;
+			const dayAdj = dailyAdjMap.get(date) ?? [];
+			for (const adjustment of dayAdj) {
+				if (adjustment.memberId in balances) {
+					balances[adjustment.memberId] += adjustment.amount;
 				}
 			}
 		}
 
-		// Apply any balance adjustments for this date.
-		const dayAdjustments = dailyAdjMap.get(date) ?? [];
-		for (const adjustment of dayAdjustments) {
-			if (adjustment.memberId in balances) {
-				balances[adjustment.memberId] += adjustment.amount;
-			}
-		}
-
-		// Snapshot the current balances for this date.
-		const point: BalanceDataPoint = { date };
+		const point: BalanceDataPoint = { date: bucketKey };
 		for (const m of members) point[m.id] = balances[m.id];
 		result.push(point);
 	}
@@ -322,8 +415,14 @@ export function generateRealBalanceChartData(
 	members: Member[],
 	expenses: Expense[],
 	adjustments: BalanceAdjustment[] = [],
+	granularity: Granularity = "day",
 ): BalanceDataPoint[] {
-	const raw = generateBalanceChartData(members, expenses, adjustments);
+	const raw = generateBalanceChartData(
+		members,
+		expenses,
+		adjustments,
+		granularity,
+	);
 	return raw.map((point) => {
 		const negated: BalanceDataPoint = { date: point.date };
 		for (const m of members) {

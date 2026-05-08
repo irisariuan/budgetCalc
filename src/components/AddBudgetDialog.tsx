@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { Calendar } from "@/components/ui/calendar";
+import { DateTimePicker, nowTimestamp } from "@/components/DateTimePicker";
 import {
 	Popover,
 	PopoverContent,
@@ -26,12 +26,6 @@ interface AddBudgetDialogProps {
 	onOpenChange: (open: boolean) => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getTodayString() {
-	return new Date().toISOString().split("T")[0];
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AddBudgetDialog({ open, onOpenChange }: AddBudgetDialogProps) {
@@ -40,7 +34,7 @@ export function AddBudgetDialog({ open, onOpenChange }: AddBudgetDialogProps) {
 	// Form state
 	const [description, setDescription] = useState("");
 	const [amount, setAmount] = useState("");
-	const [date, setDate] = useState(getTodayString);
+	const [date, setDate] = useState(nowTimestamp);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -49,7 +43,7 @@ export function AddBudgetDialog({ open, onOpenChange }: AddBudgetDialogProps) {
 	const resetForm = () => {
 		setDescription("");
 		setAmount("");
-		setDate(getTodayString());
+		setDate(nowTimestamp());
 		setErrors({});
 	};
 
@@ -142,9 +136,9 @@ export function AddBudgetDialog({ open, onOpenChange }: AddBudgetDialogProps) {
 						)}
 					</div>
 
-					{/* ── Date ── */}
+					{/* ── Date & Time ── */}
 					<div className="space-y-1.5">
-						<Label>Date</Label>
+						<Label>Date & Time</Label>
 						<Popover>
 							<PopoverTrigger asChild>
 								<Button
@@ -154,22 +148,17 @@ export function AddBudgetDialog({ open, onOpenChange }: AddBudgetDialogProps) {
 								>
 									<CalendarIcon className="mr-2 size-4 opacity-60" />
 									{date
-										? format(parseISO(date), "PPP")
-										: "Pick a date"}
+										? format(parseISO(date), "PPP, h:mm a")
+										: "Pick a date & time"}
 								</Button>
 							</PopoverTrigger>
 							<PopoverContent
 								className="w-auto p-0"
 								align="start"
 							>
-								<Calendar
-									mode="single"
-									selected={date ? parseISO(date) : undefined}
-									onSelect={(d) =>
-										setDate(
-											d ? format(d, "yyyy-MM-dd") : "",
-										)
-									}
+								<DateTimePicker
+									value={date}
+									onChange={setDate}
 								/>
 							</PopoverContent>
 						</Popover>

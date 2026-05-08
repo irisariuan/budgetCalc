@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import {
 	AreaChart,
 	Area,
@@ -9,7 +9,11 @@ import {
 } from "recharts";
 import { Wallet } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { generateBudgetChartData } from "@/lib/chartUtils";
+import {
+	generateBudgetChartData,
+	type Granularity,
+	formatBucketLabel,
+} from "@/lib/chartUtils";
 import {
 	ChartContainer,
 	ChartTooltip,
@@ -17,6 +21,7 @@ import {
 	type ChartConfig,
 } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 // ─── Static chart config ──────────────────────────────────────────────────────
 
@@ -27,15 +32,7 @@ const chartConfig = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr: string): string {
-	const d = new Date(`${dateStr}T00:00:00Z`);
-	return d.toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
-}
-
+// ─── Component ────────────────────────────────────────────────────────────────
 function formatCurrency(value: number, currency: string): string {
 	return new Intl.NumberFormat("en-US", {
 		style: "currency",
@@ -50,6 +47,7 @@ function formatCurrency(value: number, currency: string): string {
 export function BudgetOverviewChart() {
 	const { state } = useStore();
 	const currency = state.room?.currency ?? "USD";
+	const [granularity, setGranularity] = useState<Granularity>("day");
 
 	// Unique IDs so multiple chart instances on the same page don't clash
 	const uid = useId().replace(/:/g, "");
@@ -57,8 +55,13 @@ export function BudgetOverviewChart() {
 	const fillRemainingId = `fillRemaining-${uid}`;
 
 	const data = useMemo(
-		() => generateBudgetChartData(state.budgetAdditions, state.expenses),
-		[state.budgetAdditions, state.expenses],
+		() =>
+			generateBudgetChartData(
+				state.budgetAdditions,
+				state.expenses,
+				granularity,
+			),
+		[state.budgetAdditions, state.expenses, granularity],
 	);
 
 	const hasData =
@@ -114,6 +117,25 @@ export function BudgetOverviewChart() {
 					{isPositive ? "Remaining" : "Over budget"}{" "}
 					{formatCurrency(Math.abs(totalRemaining), currency)}
 				</Badge>
+			</div>
+
+			{/* Granularity toggle */}
+			<div className="flex items-center gap-1 self-end rounded-lg border border-input p-0.5">
+				{(["day", "week", "month"] as Granularity[]).map((g) => (
+					<button
+						key={g}
+						type="button"
+						onClick={() => setGranularity(g)}
+						className={cn(
+							"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+							granularity === g
+								? "bg-primary text-primary-foreground"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+					>
+						{g.charAt(0).toUpperCase() + g.slice(1)}
+					</button>
+				))}
 			</div>
 
 			<ChartContainer config={chartConfig} className="min-h-55 w-full">
@@ -189,7 +211,9 @@ export function BudgetOverviewChart() {
 						tickMargin={8}
 						minTickGap={40}
 						interval="preserveStartEnd"
-						tickFormatter={formatDate}
+						tickFormatter={(v: string) =>
+							formatBucketLabel(v, granularity)
+						}
 					/>
 
 					<YAxis
@@ -206,7 +230,10 @@ export function BudgetOverviewChart() {
 						content={
 							<ChartTooltipContent
 								labelFormatter={(value) =>
-									formatDate(String(value))
+									formatBucketLabel(
+										String(value),
+										granularity,
+									)
 								}
 								formatter={(value, name, item) => (
 									<>

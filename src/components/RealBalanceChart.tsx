@@ -13,6 +13,8 @@ import {
 	calculateCurrentRealBalances,
 	calculateSettlements,
 	type Settlement,
+	type Granularity,
+	formatBucketLabel,
 } from "@/lib/chartUtils";
 import {
 	ChartContainer,
@@ -23,21 +25,14 @@ import {
 	type ChartConfig,
 } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import SettleUpPanel from "./SettleUpPanel";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr: string): string {
-	const d = new Date(`${dateStr}T00:00:00Z`);
-	return d.toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		timeZone: "UTC",
-	});
-}
-
+// ─── Component ───────────────────────────────────────────────────────────────
 function formatCurrency(value: number, currency: string): string {
 	return new Intl.NumberFormat("en-US", {
 		style: "currency",
@@ -52,6 +47,7 @@ function formatCurrency(value: number, currency: string): string {
 export function RealBalanceChart() {
 	const { state, actions } = useStore();
 	const currency = state.room?.currency ?? "USD";
+	const [granularity, setGranularity] = useState<Granularity>("day");
 
 	const chartConfig = useMemo<ChartConfig>(() => {
 		const config: ChartConfig = {};
@@ -70,8 +66,9 @@ export function RealBalanceChart() {
 				state.members,
 				state.expenses,
 				state.balanceAdjustments,
+				granularity,
 			),
-		[state.members, state.expenses, state.balanceAdjustments],
+		[state.members, state.expenses, state.balanceAdjustments, granularity],
 	);
 
 	const currentBalances = useMemo(
@@ -109,7 +106,7 @@ export function RealBalanceChart() {
 				source: "personal",
 				paidById: settlement.fromId,
 				splitAmong: [settlement.toId],
-				receipts: []
+				receipts: [],
 			});
 		},
 		[state.members, actions],
@@ -157,6 +154,25 @@ export function RealBalanceChart() {
 				</p>
 			</div>
 
+			{/* Granularity toggle */}
+			<div className="flex items-center gap-1 self-end rounded-lg border border-input p-0.5">
+				{(["day", "week", "month"] as Granularity[]).map((g) => (
+					<button
+						key={g}
+						type="button"
+						onClick={() => setGranularity(g)}
+						className={cn(
+							"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+							granularity === g
+								? "bg-primary text-primary-foreground"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+					>
+						{g.charAt(0).toUpperCase() + g.slice(1)}
+					</button>
+				))}
+			</div>
+
 			{/* ── Area chart ───────────────────────────────────────────────── */}
 			<ChartContainer config={chartConfig} className="min-h-60 w-full">
 				<AreaChart
@@ -173,7 +189,9 @@ export function RealBalanceChart() {
 						tickMargin={8}
 						minTickGap={40}
 						interval="preserveStartEnd"
-						tickFormatter={formatDate}
+						tickFormatter={(v: string) =>
+							formatBucketLabel(v, granularity)
+						}
 					/>
 
 					<YAxis
@@ -190,7 +208,10 @@ export function RealBalanceChart() {
 						content={
 							<ChartTooltipContent
 								labelFormatter={(value) =>
-									formatDate(String(value))
+									formatBucketLabel(
+										String(value),
+										granularity,
+									)
 								}
 								formatter={(value, name, item) => (
 									<>

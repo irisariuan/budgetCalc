@@ -22,7 +22,7 @@ import {
 	type DragEvent,
 } from "react";
 import { format, parseISO } from "date-fns";
-import { Calendar } from "@/components/ui/calendar";
+import { DateTimePicker, nowTimestamp } from "@/components/DateTimePicker";
 import {
 	Popover,
 	PopoverContent,
@@ -40,12 +40,6 @@ interface AddExpenseDialogProps {
 	onOpenChange: (open: boolean) => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getTodayString() {
-	return new Date().toISOString().split("T")[0];
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AddExpenseDialog({
@@ -58,7 +52,7 @@ export function AddExpenseDialog({
 	// Form state
 	const [description, setDescription] = useState("");
 	const [amount, setAmount] = useState("");
-	const [date, setDate] = useState(getTodayString);
+	const [date, setDate] = useState(nowTimestamp);
 	const [source, setSource] = useState<ExpenseSource>("group");
 	const [paidById, setPaidById] = useState("");
 	const [splitAmong, setSplitAmong] = useState<string[]>([]);
@@ -76,7 +70,7 @@ export function AddExpenseDialog({
 	const resetForm = useCallback(() => {
 		setDescription("");
 		setAmount("");
-		setDate(getTodayString());
+		setDate(nowTimestamp());
 		setSource("group");
 		setPaidById("");
 		setSplitAmong(members.map((m) => m.id));
@@ -151,7 +145,7 @@ export function AddExpenseDialog({
 				source,
 				paidById: source === "personal" ? paidById : null,
 				splitAmong: source === "personal" ? splitAmong : [],
-				receipts
+				receipts,
 			});
 			resetForm();
 			onOpenChange(false);
@@ -217,9 +211,9 @@ export function AddExpenseDialog({
 						)}
 					</div>
 
-					{/* ── Date ── */}
+					{/* ── Date & Time ── */}
 					<div className="space-y-1.5">
-						<Label>Date</Label>
+						<Label>Date & Time</Label>
 						<Popover>
 							<PopoverTrigger asChild>
 								<Button
@@ -229,22 +223,17 @@ export function AddExpenseDialog({
 								>
 									<CalendarIcon className="mr-2 size-4 opacity-60" />
 									{date
-										? format(parseISO(date), "PPP")
-										: "Pick a date"}
+										? format(parseISO(date), "PPP, h:mm a")
+										: "Pick a date & time"}
 								</Button>
 							</PopoverTrigger>
 							<PopoverContent
 								className="w-auto p-0"
 								align="start"
 							>
-								<Calendar
-									mode="single"
-									selected={date ? parseISO(date) : undefined}
-									onSelect={(d) =>
-										setDate(
-											d ? format(d, "yyyy-MM-dd") : "",
-										)
-									}
+								<DateTimePicker
+									value={date}
+									onChange={setDate}
 								/>
 							</PopoverContent>
 						</Popover>

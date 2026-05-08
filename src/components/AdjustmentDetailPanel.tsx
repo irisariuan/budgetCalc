@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import {
 	Trash2,
-	Calendar,
+	Calendar as CalendarIcon,
 	SlidersHorizontal,
 	TrendingUp,
 	TrendingDown,
@@ -28,7 +28,10 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MemberSelect } from "./MemberSelect";
-import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import {
+	DateTimePicker,
+	normalizeTimestamp,
+} from "@/components/DateTimePicker";
 import {
 	Popover,
 	PopoverContent,
@@ -267,7 +270,7 @@ function AdjustmentViewContent({ adjustment, onClose }: ViewContentProps) {
 			{/* Meta */}
 			<div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-muted/30 text-sm overflow-hidden">
 				<div className="flex items-center gap-3 px-4 py-3">
-					<Calendar className="size-3.5 shrink-0 text-muted-foreground" />
+					<CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
 					<span className="text-muted-foreground">Date</span>
 					<span className="ml-auto font-medium tabular-nums">
 						{fmtDate(adjustment.date)}
@@ -356,7 +359,7 @@ function AdjustmentEditContent({
 	const [amountSign, setAmountSign] = useState<"+" | "-">(
 		adjustment.amount >= 0 ? "+" : "-",
 	);
-	const [date, setDate] = useState(adjustment.date);
+	const [date, setDate] = useState(normalizeTimestamp(adjustment.date));
 	const [memberId, setMemberId] = useState(adjustment.memberId);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState(false);
@@ -366,7 +369,7 @@ function AdjustmentEditContent({
 		setDescription(adjustment.description);
 		setAmountStr(String(Math.abs(adjustment.amount)));
 		setAmountSign(adjustment.amount >= 0 ? "+" : "-");
-		setDate(adjustment.date);
+		setDate(normalizeTimestamp(adjustment.date));
 		setMemberId(adjustment.memberId);
 		setErrors({});
 	}, [adjustment.id]);
@@ -493,9 +496,9 @@ function AdjustmentEditContent({
 				)}
 			</div>
 
-			{/* Date */}
+			{/* Date & Time */}
 			<div className="space-y-1.5">
-				<Label>Date</Label>
+				<Label>Date & Time</Label>
 				<Popover>
 					<PopoverTrigger asChild>
 						<Button
@@ -503,19 +506,19 @@ function AdjustmentEditContent({
 							variant="outline"
 							className="w-full justify-start text-left font-normal"
 						>
-							<Calendar className="mr-2 size-4 opacity-60" />
+							<CalendarIcon className="mr-2 size-4 opacity-60" />
 							{date
-								? format(parseISO(date), "PPP")
-								: "Pick a date"}
+								? format(
+										parseISO(normalizeTimestamp(date)),
+										"PPP, h:mm a",
+									)
+								: "Pick a date & time"}
 						</Button>
 					</PopoverTrigger>
 					<PopoverContent className="w-auto p-0" align="start">
-						<CalendarPicker
-							mode="single"
-							selected={date ? parseISO(date) : undefined}
-							onSelect={(d) =>
-								setDate(d ? format(d, "yyyy-MM-dd") : date)
-							}
+						<DateTimePicker
+							value={normalizeTimestamp(date)}
+							onChange={setDate}
 						/>
 					</PopoverContent>
 				</Popover>
