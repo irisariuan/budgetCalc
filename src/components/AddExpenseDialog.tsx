@@ -22,7 +22,7 @@ import {
 	type DragEvent,
 } from "react";
 import { format, parseISO } from "date-fns";
-import { DateTimePicker, nowTimestamp } from "@/components/DateTimePicker";
+import { DateTimePicker, DateTimePickerButton, nowTimestamp } from "@/components/DateTimePicker";
 import {
 	Popover,
 	PopoverContent,
@@ -214,29 +214,7 @@ export function AddExpenseDialog({
 					{/* ── Date & Time ── */}
 					<div className="space-y-1.5">
 						<Label>Date & Time</Label>
-						<Popover>
-							<PopoverTrigger asChild>
-								<Button
-									type="button"
-									variant="outline"
-									className="w-full justify-start text-left font-normal"
-								>
-									<CalendarIcon className="mr-2 size-4 opacity-60" />
-									{date
-										? format(parseISO(date), "PPP, h:mm a")
-										: "Pick a date & time"}
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent
-								className="w-auto p-0"
-								align="start"
-							>
-								<DateTimePicker
-									value={date}
-									onChange={setDate}
-								/>
-							</PopoverContent>
-						</Popover>
+						<DateTimePickerButton date={date} setDate={setDate} />
 					</div>
 
 					{/* ── Source toggle ── */}

@@ -5,10 +5,21 @@
 // value  : "YYYY-MM-DDTHH:mm"  (local time, 24h, no seconds, no tz)
 // onChange: called with the same format whenever date or time changes
 
-import { format, parseISO } from "date-fns";
+import { format, parseISO, setDate } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollerColumn } from "@/components/TimeScroller";
 import { Separator } from "@/components/ui/separator";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	type Dispatch,
+	type Ref,
+	type SetStateAction,
+} from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Button } from "./ui/button";
+import { CalendarIcon } from "lucide-react";
 
 // ── item lists ────────────────────────────────────────────────────────────────
 
@@ -79,9 +90,10 @@ function buildTs(
 export interface DateTimePickerProps {
 	value: string; // "YYYY-MM-DDTHH:mm" or "YYYY-MM-DD"
 	onChange: (value: string) => void;
+	ref?: Ref<HTMLDivElement>;
 }
 
-export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
+export function DateTimePicker({ value, onChange, ref }: DateTimePickerProps) {
 	const { dateObj, hour, minute, period } = parseTs(value);
 
 	const handleDateSelect = (d: Date | undefined) => {
@@ -96,16 +108,20 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
 	const handlePeriod = (p: "AM" | "PM") =>
 		onChange(buildTs(dateObj, hour, minute, p));
 
+	const now = new Date();
+	const startMonth = new Date(now.getFullYear() - 3, now.getMonth(), 1);
+	const endMonth = new Date(now.getFullYear() + 3, now.getMonth(), 1);
+
 	return (
-		<div className="flex flex-col gap-0 items-center">
+		<div className="flex flex-col gap-0 items-center" ref={ref}>
 			{/* ── Calendar ──────────────────────────────────────────────────────── */}
 			<Calendar
 				mode="single"
 				selected={dateObj}
 				onSelect={handleDateSelect}
 				captionLayout="dropdown"
-				startMonth={new Date(2020, 0)}
-				endMonth={new Date(2035, 11)}
+				startMonth={startMonth}
+				endMonth={endMonth}
 			/>
 
 			<Separator />
@@ -146,5 +162,28 @@ export function DateTimePicker({ value, onChange }: DateTimePickerProps) {
 				/>
 			</div>
 		</div>
+	);
+}
+export function DateTimePickerButton({
+	date,
+	setDate,
+}: {
+	date: string;
+	setDate: Dispatch<SetStateAction<string>>;
+}) {
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<Button variant="outline">
+					<CalendarIcon className="mr-2 size-4 opacity-60" />
+					{date
+						? format(parseISO(date), "PPP, h:mm a")
+						: "Pick a date & time"}
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent className="w-auto p-0 relative" align="start">
+				<DateTimePicker value={date} onChange={setDate} />
+			</PopoverContent>
+		</Popover>
 	);
 }
