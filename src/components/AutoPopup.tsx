@@ -60,12 +60,12 @@ export function AutoPopup({
 					className="sm:max-w-lg p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]"
 					showCloseButton={false}
 				>
-					<DialogHeader className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
+					<DialogHeader className="px-4 pt-4 pb-3 border-b border-border shrink-0">
 						<DialogTitle asChild>
 							<div>{header}</div>
 						</DialogTitle>
 					</DialogHeader>
-					<div className="overflow-y-auto flex-1 min-h-0 mt-2">
+					<div className="overflow-y-auto flex-1 min-h-0 pt-2">
 						{children}
 					</div>
 				</DialogContent>
@@ -76,12 +76,12 @@ export function AutoPopup({
 	return (
 		<Drawer open={open} onOpenChange={onOpenChange}>
 			<DrawerContent className="max-h-[92svh] flex flex-col">
-				<DrawerHeader className="px-4 pt-2 pb-3 border-b border-border flex-shrink-0">
+				<DrawerHeader className="px-4 pt-2 pb-3 border-b border-border shrink-0">
 					<DrawerTitle asChild>
 						<div>{header}</div>
 					</DrawerTitle>
 				</DrawerHeader>
-				<div className="flex-1 overflow-y-auto min-h-0 mt-2">{children}</div>
+				<div className="flex-1 overflow-y-auto min-h-0 pt-2">{children}</div>
 			</DrawerContent>
 		</Drawer>
 	);

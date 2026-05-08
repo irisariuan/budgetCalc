@@ -255,7 +255,9 @@ function reducer(state: AppState, action: AppAction): AppState {
 			return { ...state, balanceAdjustments: action.payload };
 		case "ADD_BALANCE_ADJUSTMENT":
 			// Prevent duplicate additions (e.g., from both local optimistic update and realtime)
-			if (state.balanceAdjustments.some((a) => a.id === action.payload.id)) {
+			if (
+				state.balanceAdjustments.some((a) => a.id === action.payload.id)
+			) {
 				return state;
 			}
 			return {
@@ -787,21 +789,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				let receiptUrls: string[] = [];
 				if (supabase && expenseData.receipts.length > 0) {
 					// Separate existing URLs from new files
-					const existingReceipts: Array<{ id: string; url: string }> = [];
+					const existingReceipts: Array<{ id: string; url: string }> =
+						[];
 					const newReceipts: Array<{ id: string; file: File }> = [];
 
 					for (const receipt of expenseData.receipts) {
 						if (receipt.file) {
 							// New file to upload
-							newReceipts.push({ id: receipt.id, file: receipt.file });
-						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
+							newReceipts.push({
+								id: receipt.id,
+								file: receipt.file,
+							});
+						} else if (
+							receipt.url &&
+							!receipt.url.startsWith("blob:")
+						) {
 							// Existing URL from database (when copying)
-							existingReceipts.push({ id: receipt.id, url: receipt.url });
+							existingReceipts.push({
+								id: receipt.id,
+								url: receipt.url,
+							});
 						}
 					}
 
 					// Start with existing URLs
-					receiptUrls = existingReceipts.map(r => r.url);
+					receiptUrls = existingReceipts.map((r) => r.url);
 
 					// Upload new files
 					if (newReceipts.length > 0) {
@@ -811,7 +823,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							newReceipts,
 						);
 						if (uploadedReceipts) {
-							receiptUrls = [...receiptUrls, ...uploadedReceipts.map(r => r.url)];
+							receiptUrls = [
+								...receiptUrls,
+								...uploadedReceipts.map((r) => r.url),
+							];
 						}
 					}
 				}
@@ -843,7 +858,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 						source: expense.source,
 						paid_by_id: expense.paidById,
 						split_among: expense.splitAmong,
-						receipt_url: receiptUrls.length > 0 ? receiptUrls : null,
+						receipt_url:
+							receiptUrls.length > 0 ? receiptUrls : null,
 					});
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
@@ -862,13 +878,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({ type: "REMOVE_EXPENSE", payload: expenseId });
 					const { error } = await supabase
 						.from("expenses")
 						.delete()
 						.eq("id", expenseId);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE handler will dispatch REMOVE_EXPENSE.
+					// Real-time DELETE handler will also dispatch REMOVE_EXPENSE,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({ type: "REMOVE_EXPENSE", payload: expenseId });
 					saveRoomToLocalStorage(room.id, {
@@ -921,22 +940,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
 				if (supabase) {
 					// Identify existing URLs vs new files
-					const existingReceipts: Array<{ id: string; url: string }> = [];
+					const existingReceipts: Array<{ id: string; url: string }> =
+						[];
 					const newReceipts: Array<{ id: string; file: File }> = [];
 
 					for (const receipt of data.receipts) {
 						if (receipt.file) {
 							// New file to upload
-							newReceipts.push({ id: receipt.id, file: receipt.file });
-						} else if (receipt.url && !receipt.url.startsWith('blob:')) {
+							newReceipts.push({
+								id: receipt.id,
+								file: receipt.file,
+							});
+						} else if (
+							receipt.url &&
+							!receipt.url.startsWith("blob:")
+						) {
 							// Existing URL from database
-							existingReceipts.push({ id: receipt.id, url: receipt.url });
+							existingReceipts.push({
+								id: receipt.id,
+								url: receipt.url,
+							});
 						}
 					}
 
 					// Delete receipts that were removed
 					if (existing.receiptUrl) {
-						const existingUrls = existingReceipts.map(r => r.url);
+						const existingUrls = existingReceipts.map((r) => r.url);
 						for (const oldUrl of existing.receiptUrl) {
 							if (!existingUrls.includes(oldUrl)) {
 								await deleteReceiptFile(oldUrl);
@@ -952,12 +981,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							newReceipts,
 						);
 						if (uploadedReceipts) {
-							receiptUrls = [...existingReceipts.map(r => r.url), ...uploadedReceipts.map(r => r.url)];
+							receiptUrls = [
+								...existingReceipts.map((r) => r.url),
+								...uploadedReceipts.map((r) => r.url),
+							];
 						} else {
-							receiptUrls = existingReceipts.map(r => r.url);
+							receiptUrls = existingReceipts.map((r) => r.url);
 						}
 					} else {
-						receiptUrls = existingReceipts.map(r => r.url);
+						receiptUrls = existingReceipts.map((r) => r.url);
 					}
 				}
 
@@ -1055,13 +1087,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({ type: "REMOVE_BUDGET_ADDITION", payload: id });
 					const { error } = await supabase
 						.from("budget_additions")
 						.delete()
 						.eq("id", id);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE handler will dispatch REMOVE_BUDGET_ADDITION.
+					// Real-time DELETE handler will also dispatch REMOVE_BUDGET_ADDITION,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({ type: "REMOVE_BUDGET_ADDITION", payload: id });
 					saveRoomToLocalStorage(room.id, {
@@ -1127,13 +1162,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 				if (!room) return;
 
 				if (supabase) {
+					// Optimistic update for instant UI feedback.
+					dispatch({
+						type: "REMOVE_BALANCE_ADJUSTMENT",
+						payload: id,
+					});
 					const { error } = await supabase
 						.from("balance_adjustments")
 						.delete()
 						.eq("id", id);
 					if (error)
 						dispatch({ type: "SET_ERROR", payload: error.message });
-					// Real-time DELETE will dispatch REMOVE_BALANCE_ADJUSTMENT.
+					// Real-time DELETE will also dispatch REMOVE_BALANCE_ADJUSTMENT,
+					// but filtering an already-removed item is a safe no-op.
 				} else {
 					dispatch({
 						type: "REMOVE_BALANCE_ADJUSTMENT",

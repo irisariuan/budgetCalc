@@ -38,7 +38,7 @@ export default function ReceiptEditor({
 	};
 
 	const compressImage = (file: File): Promise<File> => {
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve) => {
 			new Compressor(file, {
 				quality: 0.8,
 				maxWidth: 1920,
