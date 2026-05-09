@@ -31,38 +31,51 @@ useEffect(() => {
     if (!node) return;
 
     const updatePosition = () => {
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-        const nodeRect = node.getBoundingClientRect();
-        const side = node.getAttribute('data-side'); 
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const nodeRect = node.getBoundingClientRect();
+    const side = node.getAttribute('data-side'); 
 
-        // 1. Calculate Available Height based on side
-        let availableHeight: number;
-        if (side === 'top') {
-            availableHeight = nodeRect.bottom - 16;
+    // 1. Calculate Available Height (Same as before)
+    let availableHeight: number;
+    if (side === 'top') {
+        availableHeight = nodeRect.bottom - 16;
+    } else {
+        availableHeight = viewportHeight - nodeRect.top - 16;
+    }
+
+    node.style.maxHeight = `${availableHeight}px`;
+
+    // 2. Calculate Content Height
+    const heightRequire = Array.from(node.children).reduce((acc, child) => {
+        const childStyle = getComputedStyle(child);
+        const margins = parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
+        return acc + (child as HTMLElement).offsetHeight + margins;
+    }, 0);
+
+    const diff = heightRequire - availableHeight;
+    
+    // 3. Optimized Shift Logic
+    if (side === 'top') {
+        if (diff > 0) {
+            // Push UP: Increase bottom offset
+            node.style.bottom = `${diff}px`;
+            // BUG FIX: Ensure we don't have a 'top' value stretching the box
+            node.style.top = 'auto'; 
         } else {
-            availableHeight = viewportHeight - nodeRect.top - 16;
+            node.style.bottom = '0';
         }
-
-        node.style.maxHeight = `${availableHeight}px`;
-
-        // 2. Calculate Content Height
-        const heightRequire = Array.from(node.children).reduce((acc, child) => {
-            const childStyle = getComputedStyle(child);
-            const margins = parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
-            return acc + child.getBoundingClientRect().height + margins;
-        }, 0);
-
-        // 3. Adjust position (The "Shift")
-        const diff = heightRequire - availableHeight;
-        
-        if (side === 'bottom') {
-            node.style.bottom = diff > 0 ? `${diff}px` : "0";
-            node.style.top = "auto"; 
-        } else if (side === 'top') {
-            node.style.top = diff > 0 ? `-${diff}px` : "0";
-            node.style.bottom = "auto";
+    } else if (side === 'bottom') {
+        if (diff > 0) {
+            // Push UP: Apply negative top
+            node.style.top = `-${diff}px`;
+            // BUG FIX: Ensure 'bottom' isn't fighting this
+            node.style.bottom = 'auto';
+        } else {
+            node.style.top = '0';
         }
-    };
+    }
+};
+
 
     // Setup MutationObserver to watch Radix updates
     const observer = new MutationObserver((mutations) => {
