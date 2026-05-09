@@ -211,7 +211,14 @@ export function generateBudgetChartData(
 				: granularity === "custom" && rangeStart
 					? rangeStart
 					: todayStr();
-		return [{ date: anchor, added: 0, spent: 0, remaining: 0 }];
+		return [
+			{
+				date: anchor,
+				added: cumulativeAdded,
+				spent: cumulativeSpent,
+				remaining: cumulativeAdded - cumulativeSpent,
+			},
+		];
 	}
 
 	// ── Bucket aggregation ──────────────────────────────────────────────────
@@ -235,9 +242,15 @@ export function generateBudgetChartData(
 				? rangeStart
 				: dayBefore(sortedBuckets[0]);
 
-	const result: BudgetDataPoint[] = [
-		{ date: anchorDate, added: cumulativeAdded, spent: cumulativeSpent, remaining: cumulativeAdded - cumulativeSpent },
-	];
+	const result: BudgetDataPoint[] = [];
+	if (sortedBuckets[0] !== anchorDate) {
+		result.push({
+			date: anchorDate,
+			added: cumulativeAdded,
+			spent: cumulativeSpent,
+			remaining: cumulativeAdded - cumulativeSpent,
+		});
+	}
 
 	for (const key of sortedBuckets) {
 		const { added, spent } = bucketMap.get(key)!;
@@ -276,9 +289,9 @@ export function generateBalanceChartData(
 	adjustments: BalanceAdjustment[] = [],
 	granularity: Granularity = "day",
 	options?: {
-		selectedDate?: string; // YYYY-MM-DD for "daily"
-		rangeStart?: string; // YYYY-MM-DD for "custom"
-		rangeEnd?: string; // YYYY-MM-DD for "custom"
+		selectedDate?: string;
+		rangeStart?: string;
+		rangeEnd?: string;
 	},
 ): BalanceDataPoint[] {
 	const selectedDate = options?.selectedDate ?? todayStr();
@@ -288,6 +301,36 @@ export function generateBalanceChartData(
 	const isDaily = granularity === "daily";
 	const isCustom = granularity === "custom";
 
+	// ── 1. Calculate Initial Balances (Pre-calculation) ──────────────────
+	const cutoffDate = isDaily ? selectedDate : isCustom ? rangeStart : null;
+	const balances: Record<string, number> = {};
+	for (const m of members) balances[m.id] = 0;
+
+	if (cutoffDate) {
+		// Pre-calculate expenses before cutoff
+		for (const e of expenses) {
+			if (e.source === "personal" && toDateOnly(e.date) < cutoffDate) {
+				if (e.splitAmong.length === 0) continue;
+				if (e.paidById !== null && e.paidById in balances) {
+					balances[e.paidById] += e.amount;
+				}
+				const share = e.amount / e.splitAmong.length;
+				for (const memberId of e.splitAmong) {
+					if (memberId in balances) balances[memberId] -= share;
+				}
+			}
+		}
+		// Pre-calculate adjustments before cutoff
+		for (const a of adjustments) {
+			if (toDateOnly(a.date) < cutoffDate) {
+				if (a.memberId in balances) {
+					balances[a.memberId] += a.amount;
+				}
+			}
+		}
+	}
+
+	// ── 2. Filter logic for the visible chart range ──────────────────────
 	const inRange = (rawDate: string): boolean => {
 		if (isDaily) return toDateOnly(rawDate) === selectedDate;
 		if (isCustom && rangeStart && rangeEnd) {
@@ -302,26 +345,28 @@ export function generateBalanceChartData(
 		.filter((e) => inRange(e.date));
 	const filteredAdjustments = adjustments.filter((a) => inRange(a.date));
 
-	// Zero anchor – used when there are no events at all.
-	const buildZeroPoint = (date: string): BalanceDataPoint => {
+	// Helper to build a point based on current balance state
+	const buildPoint = (date: string): BalanceDataPoint => {
 		const point: BalanceDataPoint = { date };
-		for (const m of members) point[m.id] = 0;
+		for (const m of members) point[m.id] = balances[m.id];
 		return point;
 	};
 
+	// ── 3. Handle Empty State ──────────────────────────────────────────────
+	const anchorDate = isDaily
+		? `${selectedDate}T00:00`
+		: isCustom && rangeStart
+			? rangeStart
+			: todayStr();
+
 	if (personalExpenses.length === 0 && filteredAdjustments.length === 0) {
-		const emptyAnchor = isDaily
-			? `${selectedDate}T00:00`
-			: isCustom && rangeStart
-				? rangeStart
-				: todayStr();
-		return [buildZeroPoint(emptyAnchor)];
+		return [buildPoint(anchorDate)];
 	}
 
+	// ── 4. Mapping & Aggregation ──────────────────────────────────────────
 	const keyOf = (rawDate: string): string =>
 		isDaily ? toMinuteTs(rawDate) : toDateOnly(rawDate);
 
-	// Group personal expenses by per-event key.
 	const dailyExpenseMap = new Map<string, Expense[]>();
 	for (const expense of personalExpenses) {
 		const k = keyOf(expense.date);
@@ -330,7 +375,6 @@ export function generateBalanceChartData(
 		dailyExpenseMap.set(k, list);
 	}
 
-	// Group adjustments by per-event key.
 	const dailyAdjMap = new Map<string, BalanceAdjustment[]>();
 	for (const adj of filteredAdjustments) {
 		const k = keyOf(adj.date);
@@ -339,14 +383,11 @@ export function generateBalanceChartData(
 		dailyAdjMap.set(k, list);
 	}
 
-	// Merge all event keys and sort
 	const allDates = Array.from(
 		new Set([...dailyExpenseMap.keys(), ...dailyAdjMap.keys()]),
 	).sort();
 
-	// ── Bucket aggregation ──────────────────────────────────────────────────
-	// Group dates into their bucket, preserving day-level maps for processing
-	const bucketDates = new Map<string, string[]>(); // bucketKey → list of event-keys
+	const bucketDates = new Map<string, string[]>();
 	for (const date of allDates) {
 		const key = getBucketKey(date, granularity);
 		const list = bucketDates.get(key) ?? [];
@@ -355,21 +396,24 @@ export function generateBalanceChartData(
 	}
 	const sortedBuckets = Array.from(bucketDates.keys()).sort();
 
-	const balances: Record<string, number> = {};
-	for (const m of members) balances[m.id] = 0;
+	// ── 5. Build Result Set ────────────────────────────────────────────────
+	const result: BalanceDataPoint[] = [];
 
-	const anchorDate = isDaily
-		? `${selectedDate}T00:00`
-		: isCustom && rangeStart
-			? rangeStart
+	// Add anchor only if it doesn't collide with the first bucket
+	const actualAnchorDate =
+		isDaily || (isCustom && rangeStart)
+			? anchorDate
 			: dayBefore(sortedBuckets[0]);
 
-	const result: BalanceDataPoint[] = [buildZeroPoint(anchorDate)];
+	if (sortedBuckets.length === 0 || sortedBuckets[0] !== actualAnchorDate) {
+		result.push(buildPoint(actualAnchorDate));
+	}
 
 	for (const bucketKey of sortedBuckets) {
 		const datesInBucket = bucketDates.get(bucketKey)!;
 
 		for (const date of datesInBucket) {
+			// Apply expenses in this bucket to running balances
 			const dayExpenses = dailyExpenseMap.get(date) ?? [];
 			for (const expense of dayExpenses) {
 				if (expense.splitAmong.length === 0) continue;
@@ -381,6 +425,7 @@ export function generateBalanceChartData(
 					if (memberId in balances) balances[memberId] -= share;
 				}
 			}
+			// Apply adjustments in this bucket
 			const dayAdj = dailyAdjMap.get(date) ?? [];
 			for (const adjustment of dayAdj) {
 				if (adjustment.memberId in balances) {
@@ -388,15 +433,11 @@ export function generateBalanceChartData(
 				}
 			}
 		}
-
-		const point: BalanceDataPoint = { date: bucketKey };
-		for (const m of members) point[m.id] = balances[m.id];
-		result.push(point);
+		result.push(buildPoint(bucketKey));
 	}
 
 	return result;
 }
-
 // ─── Settlements ────────────────────────────────────────────────────────────────
 
 export interface Settlement {
