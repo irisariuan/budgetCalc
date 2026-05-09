@@ -22,57 +22,77 @@ function PopoverContent({
 }: ComponentProps<typeof PopoverPrimitive.Content>) {
 	const [node, setNode] = useState<HTMLDivElement | null>(null);
 
-// The ref just stores the element
+// The ref simply captures the DOM element
 const measuredRef = useCallback((el: HTMLDivElement | null) => {
     setNode(el);
 }, []);
 
-// The effect handles the logic and CLEANUP
 useEffect(() => {
     if (!node) return;
 
     const updatePosition = () => {
         const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
         const nodeRect = node.getBoundingClientRect();
-        const side = node.getAttribute('data-side');
+        const side = node.getAttribute('data-side'); 
 
-        let availableHeight = side === 'top' 
-            ? nodeRect.bottom - 16 
-            : viewportHeight - nodeRect.top - 16;
+        // 1. Calculate Available Height based on side
+        let availableHeight: number;
+        if (side === 'top') {
+            availableHeight = nodeRect.bottom - 16;
+        } else {
+            availableHeight = viewportHeight - nodeRect.top - 16;
+        }
 
         node.style.maxHeight = `${availableHeight}px`;
 
+        // 2. Calculate Content Height
         const heightRequire = Array.from(node.children).reduce((acc, child) => {
             const childStyle = getComputedStyle(child);
             const margins = parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
             return acc + child.getBoundingClientRect().height + margins;
         }, 0);
 
+        // 3. Adjust position (The "Shift")
         const diff = heightRequire - availableHeight;
-
+        
         if (side === 'bottom') {
             node.style.bottom = diff > 0 ? `${diff}px` : "0";
-            node.style.top = "auto";
+            node.style.top = "auto"; 
         } else if (side === 'top') {
-            // Pushes the 'top' popover DOWN so the top edge stays in view
-            node.style.bottom = diff > 0 ? `-${diff}px` : "0";
-            node.style.top = "auto";
+            node.style.top = diff > 0 ? `-${diff}px` : "0";
+            node.style.bottom = "auto";
         }
     };
 
-    const observer = new MutationObserver(updatePosition);
-    observer.observe(node, { attributes: true, attributeFilter: ['data-side'] });
+    // Setup MutationObserver to watch Radix updates
+    const observer = new MutationObserver((mutations) => {
+        const shouldUpdate = mutations.some(m => 
+            m.attributeName === 'data-side' || 
+            m.attributeName === 'style'
+        );
+        if (shouldUpdate) updatePosition();
+    });
+
+    observer.observe(node, { 
+        attributes: true, 
+        attributeFilter: ['data-side', 'style'] 
+    });
+
+    // Setup Viewport Listeners
     window.visualViewport?.addEventListener("resize", updatePosition);
     window.visualViewport?.addEventListener("scroll", updatePosition);
-    
-    updatePosition();
 
+    // Initial run
+    requestAnimationFrame(updatePosition);
+
+    // Cleanup: This runs when the component unmounts or the node changes
     return () => {
         observer.disconnect();
         window.visualViewport?.removeEventListener("resize", updatePosition);
         window.visualViewport?.removeEventListener("scroll", updatePosition);
     };
-}, [node]);
+}, [node]); // Re-run effect only when the node element changes
+
 
 	return (
 		<PopoverPrimitive.Portal>
