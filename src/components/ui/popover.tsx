@@ -22,43 +22,73 @@ function PopoverContent({
 }: ComponentProps<typeof PopoverPrimitive.Content>) {
 	const [node, setNode] = useState<HTMLDivElement | null>(null);
 
-	useEffect(() => {
-    if (!node) return;
+useEffect(() => {
+	if (!node) return;
 
-    const updatePosition = () => {
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-        const nodeRect = node.getBoundingClientRect();
-        
-        // Use the CSS variable Radix provides if available, 
-        // otherwise calculate based on viewport.
-        const availableHeight = side === "top" 
-            ? nodeRect.bottom - 16 
-            : viewportHeight - nodeRect.top - 16;
+	const updatePosition = () => {
+		const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+		const nodeRect = node.getBoundingClientRect();
+		
+		// 1. Calculate Available Height based on side
+		let availableHeight: number;
+		if (side === "top") {
+			availableHeight = nodeRect.bottom - 16;
+		} else {
+			availableHeight = viewportHeight - nodeRect.top - 16;
+		}
 
-        node.style.setProperty('--custom-available-height', `${availableHeight}px`);
-        
-        // Instead of fighting 'top'/'bottom', use maxHeight
-        node.style.maxHeight = `${availableHeight}px`;
-        node.style.overflowY = 'auto';
-    };
+		// 2. Calculate Content Height (sum of children + margins)
+		const heightRequire = Array.from(node.children).reduce(
+			(acc, child) => {
+				const childStyle = window.getComputedStyle(child);
+				const margins =
+					parseFloat(childStyle.marginTop) +
+					parseFloat(childStyle.marginBottom);
+				return acc + (child as HTMLElement).offsetHeight + margins;
+			},
+			0,
+		);
 
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", updatePosition);
-    viewport?.addEventListener("scroll", updatePosition);
-    
-    // Initial trigger
-    updatePosition();
+		// 3. Adjust position (The "Shift")
+		const diff = heightRequire - availableHeight;
 
-    return () => {
-        viewport?.removeEventListener("resize", updatePosition);
-        viewport?.removeEventListener("scroll", updatePosition);
-    };
-}, [node, side]); // Runs whenever the node is set or side changes
+		if (side === "bottom") {
+			// If content is taller than space, shift it UP by the difference
+			node.style.top = diff > 0 ? `-${diff}px` : "0";
+			node.style.maxHeight = `${availableHeight + (diff > 0 ? diff : 0)}px`;
+		} else if (side === "top") {
+			// If content is taller than space, shift it DOWN
+			node.style.bottom = diff > 0 ? `-${diff}px` : "0";
+			node.style.maxHeight = `${availableHeight + (diff > 0 ? diff : 0)}px`;
+		} else {
+			node.style.maxHeight = "var(--radix-popover-content-available-height)"
+		}
+	};
 
-// Attach this to Popover.Content
-	const measuredRef = useCallback((el: HTMLDivElement | null) => {
-    setNode(el);
-	}, []);
+	// Use ResizeObserver to handle content changes dynamically
+	const resizeObserver = new ResizeObserver(() => {
+		requestAnimationFrame(updatePosition);
+	});
+
+	resizeObserver.observe(node);
+	window.visualViewport?.addEventListener("resize", updatePosition);
+	window.visualViewport?.addEventListener("scroll", updatePosition);
+
+	// Initial execution
+	updatePosition();
+
+	return () => {
+		resizeObserver.disconnect();
+		window.visualViewport?.removeEventListener("resize", updatePosition);
+		window.visualViewport?.removeEventListener("scroll", updatePosition);
+	};
+}, [node, side]);
+
+// The ref simply saves the node to state
+const measuredRef = useCallback((node: HTMLDivElement | null) => {
+	setNode(node);
+}, []);
+
 
 	return (
 		<PopoverPrimitive.Portal>
