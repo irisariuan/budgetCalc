@@ -23,9 +23,7 @@ export default function SettleUpPanel({
 	currency,
 	onMarkAsPaid,
 }: SettleUpPanelProps) {
-	const [processingIdx, setProcessingIdx] = useState<number | null>(
-		null,
-	);
+	const [processingIdx, setProcessingIdx] = useState<number | null>(null);
 
 	const fmt = (n: number) =>
 		new Intl.NumberFormat("en-US", {

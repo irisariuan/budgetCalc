@@ -118,7 +118,7 @@ export function UserBalanceChart() {
 			);
 			if (!payer || !receiver) return;
 
-			const today = new Date().toISOString()
+			const today = new Date().toISOString();
 			await actions.addExpense({
 				description: `Settlement: ${payer.name} → ${receiver.name}`,
 				amount: settlement.amount,

@@ -115,7 +115,7 @@ export function RealBalanceChart() {
 				(m) => m.id === settlement.toId,
 			);
 			if (!payer || !receiver) return;
-			const today = new Date().toISOString().split("T")[0];
+			const today = new Date().toISOString();
 			await actions.addExpense({
 				description: `Settlement: ${payer.name} → ${receiver.name}`,
 				amount: settlement.amount,
