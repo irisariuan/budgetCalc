@@ -51,7 +51,7 @@ function parseTs(value: string): {
 	const h24 = dateObj.getHours();
 	const period: "AM" | "PM" = h24 >= 12 ? "PM" : "AM";
 	const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
-	const minute = dateObj.getMinutes().toString().padStart(2, "0")
+	const minute = dateObj.getMinutes().toString().padStart(2, "0");
 	return { dateObj, hour: String(h12).padStart(2, "0"), minute, period };
 }
 
