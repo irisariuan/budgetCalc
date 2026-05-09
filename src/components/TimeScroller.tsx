@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 const ITEM_H = 40; // px – height of each list item
 const VISIBLE = 5; // number of rows visible at once
 const DRAG_THRESHOLD = 4; // px – minimum movement before we call it a drag
-const WHEEL_SENSITIVITY = 0.1; // fraction of raw deltaY applied to scrollTop (lower = less friction)
+const WHEEL_SENSITIVITY = 0.6; // fraction of raw deltaY applied to scrollTop (lower = less friction)
 const DRAG_SENSITIVITY = 0.85; // fraction of raw drag delta applied to scrollTop
 const SCROLL_DURATION = 500; // ms – max duration of the snap animation
 const BOUNCE_OVERSHOOT = 1.15; // >1 overshoots then settles back = bouncy feel

@@ -5,18 +5,11 @@
 // value  : "YYYY-MM-DDTHH:mm"  (local time, 24h, no seconds, no tz)
 // onChange: called with the same format whenever date or time changes
 
-import { format, parseISO, setDate } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollerColumn } from "@/components/TimeScroller";
 import { Separator } from "@/components/ui/separator";
-import {
-	useCallback,
-	useEffect,
-	useRef,
-	type Dispatch,
-	type Ref,
-	type SetStateAction,
-} from "react";
+import { type Dispatch, type Ref, type SetStateAction } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Button } from "./ui/button";
 import { CalendarIcon } from "lucide-react";
@@ -181,7 +174,7 @@ export function DateTimePickerButton({
 						: "Pick a date & time"}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent className="w-auto p-0 relative" align="start">
+			<PopoverContent className="w-auto p-0 relative h-fit" align="start">
 				<DateTimePicker value={date} onChange={setDate} />
 			</PopoverContent>
 		</Popover>
