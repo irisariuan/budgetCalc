@@ -354,6 +354,7 @@ export function RoomSetup() {
 									}
 									pattern={REGEXP_ONLY_DIGITS_AND_CHARS}
 									disabled={isBusy}
+									inputMode="text"
 								>
 									<InputOTPGroup>
 										<InputOTPSlot
