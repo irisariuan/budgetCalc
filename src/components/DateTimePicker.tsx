@@ -9,10 +9,10 @@ import { format, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollerColumn } from "@/components/TimeScroller";
 import { Separator } from "@/components/ui/separator";
-import { type Dispatch, type Ref, type SetStateAction } from "react";
+import { useRef, type Dispatch, type Ref, type SetStateAction } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Button } from "./ui/button";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Clock, TimerReset, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 // ── item lists ────────────────────────────────────────────────────────────────
@@ -91,21 +91,27 @@ export interface DateTimePickerProps {
 export function DateTimePicker({ value, onChange, ref }: DateTimePickerProps) {
 	const { dateObj, hour, minute, period } = parseTs(value);
 
+	const handleChange = (v: string) => {
+		undoStack.current.push(value);
+		onChange(v);
+	};
+
 	const handleDateSelect = (d: Date | undefined) => {
 		if (!d) return;
-		onChange(buildTs(d, hour, minute, period));
+		handleChange(buildTs(d, hour, minute, period));
 	};
 
 	const handleHour = (h: string) =>
-		onChange(buildTs(dateObj, h, minute, period));
+		handleChange(buildTs(dateObj, h, minute, period));
 	const handleMinute = (m: string) =>
-		onChange(buildTs(dateObj, hour, m, period));
+		handleChange(buildTs(dateObj, hour, m, period));
 	const handlePeriod = (p: "AM" | "PM") =>
-		onChange(buildTs(dateObj, hour, minute, p));
+		handleChange(buildTs(dateObj, hour, minute, p));
 
 	const now = new Date();
 	const startMonth = new Date(now.getFullYear() - 3, now.getMonth(), 1);
 	const endMonth = new Date(now.getFullYear() + 3, now.getMonth(), 1);
+	const undoStack = useRef<string[]>([]);
 
 	return (
 		<div className="flex flex-col gap-0 items-center" ref={ref}>
@@ -124,9 +130,40 @@ export function DateTimePicker({ value, onChange, ref }: DateTimePickerProps) {
 			{/* ── Time drum-roll ─────────────────────────────────────────────────── */}
 			<div className="flex items-center justify-center gap-1 px-3 py-2">
 				{/* Label */}
-				<span className="mr-2 text-xs text-muted-foreground shrink-0">
-					Time
-				</span>
+				<div className="mr-2 shrink-0 flex flex-col items-center gap-1">
+					<Button
+						size="icon-sm"
+						variant="outline"
+						onClick={() => handleChange(nowTimestamp())}
+					>
+						<Clock />
+					</Button>
+					<Button
+						size="icon-sm"
+						variant="outline"
+						disabled={undoStack.current.length === 0}
+						onClick={() => {
+							const val = undoStack.current.pop()
+							if (!val) return;
+							onChange(val);
+						}}
+					>
+						<Undo2 />
+					</Button>
+					<Button
+						size="icon-sm"
+						variant="outline"
+						disabled={undoStack.current.length === 0}
+						onClick={() => {
+							const val = undoStack.current.shift()
+							if (!val) return;
+							onChange(val);
+							undoStack.current = []
+						}}
+					>
+						<TimerReset />
+					</Button>
+				</div>
 
 				{/* Hours */}
 				<ScrollerColumn
