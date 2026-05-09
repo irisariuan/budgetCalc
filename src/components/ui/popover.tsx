@@ -26,49 +26,51 @@ useEffect(() => {
 	if (!node) return;
 
 	const updatePosition = () => {
-		const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-		const nodeRect = node.getBoundingClientRect();
-		
-		// 1. Calculate Available Height based on side
-		let availableHeight: number;
-		if (side === "top") {
-			availableHeight = nodeRect.bottom - 16;
-		} else {
-			availableHeight = viewportHeight - nodeRect.top - 16;
-		}
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const nodeRect = node.getBoundingClientRect();
+    
+    // 1. Calculate Available Height
+    let availableHeight: number;
+    if (side === "top") {
+        // Space from the top of the viewport to the bottom of the popover
+        availableHeight = nodeRect.bottom - 16;
+    } else {
+        // Space from the top of the popover to the bottom of the viewport
+        availableHeight = viewportHeight - nodeRect.top - 16;
+    }
 
-		// 2. Calculate Content Height (sum of children + margins)
-		const heightRequire = Array.from(node.children).reduce(
-			(acc, child) => {
-				const childStyle = window.getComputedStyle(child);
-				const margins =
-					parseFloat(childStyle.marginTop) +
-					parseFloat(childStyle.marginBottom);
-				return acc + (child as HTMLElement).offsetHeight + margins;
-			},
-			0,
-		);
+    // 2. Calculate Content Height
+    const heightRequire = Array.from(node.children).reduce((acc, child) => {
+        const childStyle = window.getComputedStyle(child);
+        const margins = parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
+        return acc + (child as HTMLElement).offsetHeight + margins;
+    }, 0);
 
-		// 3. Adjust position (The "Shift")
-		const diff = heightRequire - availableHeight;
+    const diff = heightRequire - availableHeight;
 
-		if (side === "bottom") {
-			// If content is taller than space, shift it UP by the difference
-			node.style.top = diff > 0 ? `-${diff}px` : "0";
-			node.style.maxHeight = `${availableHeight + (diff > 0 ? diff : 0)}px`;
-		} else if (side === "top") {
-			// If content is taller than space, shift it DOWN
-			node.style.bottom = diff > 0 ? `-${diff}px` : "0";
-			node.style.maxHeight = `${availableHeight + (diff > 0 ? diff : 0)}px`;
-		} else {
-			node.style.maxHeight = "var(--radix-popover-content-available-height)"
-		}
-	};
+    // 3. The "Shift"
+    if (side === "top") {
+        if (diff > 0) {
+            // Push UP: We move the element further into negative space
+            // We use transform so we don't fight Radix's 'top' or 'bottom'
+            node.style.transform = `translateY(-${diff}px)`;
+            node.style.maxHeight = `${heightRequire}px`; 
+        } else {
+            node.style.transform = "translateY(0)";
+            node.style.maxHeight = "none";
+        }
+    } else if (side === "bottom") {
+        if (diff > 0) {
+            // Push UP: Same direction, but usually Radix anchors 'bottom' differently
+            node.style.transform = `translateY(-${diff}px)`;
+            node.style.maxHeight = `${heightRequire}px`;
+        } else {
+            node.style.transform = "translateY(0)";
+            node.style.maxHeight = "none";
+        }
+    }
+};
 
-	// Use ResizeObserver to handle content changes dynamically
-	const resizeObserver = new ResizeObserver(() => {
-		requestAnimationFrame(updatePosition);
-	});
 
 	resizeObserver.observe(node);
 	window.visualViewport?.addEventListener("resize", updatePosition);
