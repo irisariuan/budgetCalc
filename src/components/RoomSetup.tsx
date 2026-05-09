@@ -36,6 +36,7 @@ import { useEffect, useState, type SubmitEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Room } from "@/lib/types";
 import { Badge } from "./ui/badge";
+import { REGEXP_ONLY_DIGITS_AND_CHARS } from "input-otp";
 
 const CURRENCIES = [
 	{ code: "USD", label: "USD – US Dollar" },
@@ -351,6 +352,7 @@ export function RoomSetup() {
 												.replace(/[^A-Z0-9]/g, ""),
 										)
 									}
+									pattern={REGEXP_ONLY_DIGITS_AND_CHARS}
 									disabled={isBusy}
 								>
 									<InputOTPGroup>
