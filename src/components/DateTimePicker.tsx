@@ -20,12 +20,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Button } from "./ui/button";
 import { CalendarIcon } from "lucide-react";
+import { toast } from "sonner";
 
 // ── item lists ────────────────────────────────────────────────────────────────
 
-const HOURS = Array.from({ length: 12 }, (_, i) =>
-	String(i).padStart(2, "0"),
-);
+const HOURS = Array.from({ length: 12 }, (_, i) => String(i).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, i) =>
 	String(i).padStart(2, "0"),
 );
@@ -67,11 +66,23 @@ function buildTs(
 	minute: string,
 	period: "AM" | "PM",
 ): string {
-	const h12 = parseInt(hour, 10);
-	const h24 =
-		period === "AM" ? (h12 === 12 ? 0 : h12) : h12 === 12 ? 12 : h12 + 12;
-	const dateStr = format(dateObj, "yyyy-MM-dd");
-	return `${dateStr}T${String(h24).padStart(2, "0")}:${minute}`;
+	try {
+		const h12 = parseInt(hour, 10);
+		const h24 =
+			period === "AM"
+				? h12 === 12
+					? 0
+					: h12
+				: h12 === 12
+					? 12
+					: h12 + 12;
+		const dateStr = format(dateObj, "yyyy-MM-dd");
+		return `${dateStr}T${String(h24).padStart(2, "0")}:${minute}`;
+	} catch (e) {
+		console.error("Error building timestamp:", e);
+		toast.error("Invalid date or time");
+		return nowTimestamp();
+	}
 }
 
 // ── component ─────────────────────────────────────────────────────────────────

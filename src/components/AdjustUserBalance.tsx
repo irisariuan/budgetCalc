@@ -1,25 +1,14 @@
 // ── Adjust Balance Row ────────────────────────────────────────────────────
-import { format, parseISO } from "date-fns";
-import type { Member } from "@/lib/types";
 import {
-	SlidersHorizontal,
-	CalendarIcon,
-	X,
 	Check,
 	BadgeDollarSign,
 } from "lucide-react";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
 import { useState, type SubmitEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
 import { useStore } from "@/lib/store";
-import { Label } from "./ui/label";
 import { MemberSelect } from "./MemberSelect";
+import { DateTimePickerButton } from "./DateTimePicker";
 
 export default function AdjustUserBalance() {
 	const { actions, state } = useStore();
@@ -33,7 +22,7 @@ export default function AdjustUserBalance() {
 	const [sign, setSign] = useState<"+" | "-">("+");
 	const [amountStr, setAmountStr] = useState("");
 	const [description, setDescription] = useState("");
-	const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+	const [date, setDate] = useState(new Date().toISOString());
 
 	const handleSubmit = (e: SubmitEvent) => {
 		e.preventDefault();
@@ -128,35 +117,7 @@ export default function AdjustUserBalance() {
 						/>
 
 						{/* Date */}
-						<Popover>
-							<PopoverTrigger asChild>
-								<Button
-									type="button"
-									variant="outline"
-									disabled={isBusy}
-									className="w-full justify-start text-left font-normal"
-								>
-									<CalendarIcon className="mr-2 size-4 opacity-60" />
-									{date
-										? format(parseISO(date), "PPP")
-										: "Pick a date"}
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent
-								className="w-auto p-0"
-								align="start"
-							>
-								<Calendar
-									mode="single"
-									selected={date ? parseISO(date) : undefined}
-									onSelect={(d) =>
-										setDate(
-											d ? format(d, "yyyy-MM-dd") : "",
-										)
-									}
-								/>
-							</PopoverContent>
-						</Popover>
+						<DateTimePickerButton date={date} setDate={setDate} />
 
 						{/* Preview */}
 						{amountNum > 0 && (
