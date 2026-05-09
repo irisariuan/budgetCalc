@@ -68,41 +68,51 @@ export default function SettleUpPanel({
 								key={i}
 								className="flex items-center gap-3 px-4 py-3"
 							>
-								{/* Payer */}
-								<div
-									className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-									style={{ backgroundColor: payer.color }}
-								>
-									{payer.name.charAt(0).toUpperCase()}
+								<div className="flex flex-wrap flex-1">
+									{/* Payer */}
+									<div className="flex flex-1 items-center gap-1.5 shrink-0">
+										<div
+											className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+											style={{
+												backgroundColor: payer.color,
+											}}
+										>
+											{payer.name.charAt(0).toUpperCase()}
+										</div>
+										<span className="truncate font-medium">
+											{payer.name}
+										</span>
+										<span className="text-sm text-muted-foreground">
+											pays
+										</span>
+										<span
+											className="font-mono text-sm font-semibold"
+											style={{ color: payer.color }}
+										>
+											{fmt(s.amount)}
+										</span>
+										<span className="text-sm text-muted-foreground">
+											to
+										</span>
+									</div>
+									<div className="flex-1 flex gap-1.5 items-center">
+										<ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground block ml-auto" />
+										{/* Receiver */}
+										<div
+											className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+											style={{
+												backgroundColor: receiver.color,
+											}}
+										>
+											{receiver.name
+												.charAt(0)
+												.toUpperCase()}
+										</div>
+										<span className="truncate font-medium">
+											{receiver.name}
+										</span>
+									</div>
 								</div>
-								<div className="flex min-w-0 flex-1 items-center gap-1.5">
-									<span className="truncate font-medium">
-										{payer.name}
-									</span>
-									<span className="text-sm text-muted-foreground">
-										pays
-									</span>
-									<span
-										className="font-mono text-sm font-semibold"
-										style={{ color: payer.color }}
-									>
-										{fmt(s.amount)}
-									</span>
-									<span className="text-sm text-muted-foreground">
-										to
-									</span>
-								</div>
-								<ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-								{/* Receiver */}
-								<div
-									className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-									style={{ backgroundColor: receiver.color }}
-								>
-									{receiver.name.charAt(0).toUpperCase()}
-								</div>
-								<span className="truncate font-medium">
-									{receiver.name}
-								</span>
 								<Button
 									variant="ghost"
 									size="icon"

@@ -51,7 +51,7 @@ function parseTs(value: string): {
 	const h24 = dateObj.getHours();
 	const period: "AM" | "PM" = h24 >= 12 ? "PM" : "AM";
 	const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
-	const minute = dateObj.getMinutes().toString();
+	const minute = dateObj.getMinutes().toString().padStart(2, "0")
 	return { dateObj, hour: String(h12).padStart(2, "0"), minute, period };
 }
 
@@ -143,7 +143,7 @@ export function DateTimePicker({ value, onChange, ref }: DateTimePickerProps) {
 						variant="outline"
 						disabled={undoStack.current.length === 0}
 						onClick={() => {
-							const val = undoStack.current.pop()
+							const val = undoStack.current.pop();
 							if (!val) return;
 							onChange(val);
 						}}
@@ -155,10 +155,10 @@ export function DateTimePicker({ value, onChange, ref }: DateTimePickerProps) {
 						variant="outline"
 						disabled={undoStack.current.length === 0}
 						onClick={() => {
-							const val = undoStack.current.shift()
+							const val = undoStack.current.shift();
 							if (!val) return;
 							onChange(val);
-							undoStack.current = []
+							undoStack.current = [];
 						}}
 					>
 						<TimerReset />
@@ -203,14 +203,14 @@ export function DateTimePickerButton({
 	date: string;
 	setDate: Dispatch<SetStateAction<string>>;
 }) {
+	const formattedString = format(parseISO(date), "PPP, h:mm a");
+
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
 				<Button variant="outline">
 					<CalendarIcon className="mr-2 size-4 opacity-60" />
-					{date
-						? format(parseISO(date), "PPP, h:mm a")
-						: "Pick a date & time"}
+					{date ? formattedString : "Pick a date & time"}
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent className="w-auto p-0 relative h-fit" align="start">
