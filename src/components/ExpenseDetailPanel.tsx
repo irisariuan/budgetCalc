@@ -41,6 +41,7 @@ import { Label } from "@/components/ui/label";
 import { MemberMultiSelect, MemberSelect } from "./MemberSelect";
 import {
 	DateTimePicker,
+	DateTimePickerButton,
 	normalizeTimestamp,
 } from "@/components/DateTimePicker";
 import {
@@ -697,29 +698,7 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 			{/* Date & Time */}
 			<div className="space-y-1.5">
 				<Label>Date & Time</Label>
-				<Popover>
-					<PopoverTrigger asChild>
-						<Button
-							type="button"
-							variant="outline"
-							className="w-full justify-start text-left font-normal"
-						>
-							<CalendarIcon className="mr-2 size-4 opacity-60" />
-							{date
-								? format(
-										parseISO(normalizeTimestamp(date)),
-										"PPP, h:mm a",
-									)
-								: "Pick a date & time"}
-						</Button>
-					</PopoverTrigger>
-					<PopoverContent className="w-auto p-0" align="start">
-						<DateTimePicker
-							value={normalizeTimestamp(date)}
-							onChange={setDate}
-						/>
-					</PopoverContent>
-				</Popover>
+				<DateTimePickerButton date={date} setDate={setDate} />
 			</div>
 
 			{/* Source */}
