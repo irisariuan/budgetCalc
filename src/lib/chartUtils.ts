@@ -156,6 +156,28 @@ export function generateBudgetChartData(
 	};
 
 	const isDaily = granularity === "daily";
+	const cutoffDate = isDaily
+		? selectedDate
+		: granularity === "custom"
+			? rangeStart
+			: null;
+	let cumulativeAdded = 0;
+	let cumulativeSpent = 0;
+	if (cutoffDate) {
+		for (const addition of budgetAdditions) {
+			if (toDateOnly(addition.date) < cutoffDate) {
+				cumulativeAdded += addition.amount;
+			}
+		}
+		for (const expense of expenses) {
+			if (
+				expense.source === "group" &&
+				toDateOnly(expense.date) < cutoffDate
+			) {
+				cumulativeSpent += expense.amount;
+			}
+		}
+	}
 
 	// Accumulate deltas keyed per event-date (day for everything except
 	// "daily", which keys per full timestamp).
@@ -214,11 +236,8 @@ export function generateBudgetChartData(
 				: dayBefore(sortedBuckets[0]);
 
 	const result: BudgetDataPoint[] = [
-		{ date: anchorDate, added: 0, spent: 0, remaining: 0 },
+		{ date: anchorDate, added: cumulativeAdded, spent: cumulativeSpent, remaining: cumulativeAdded - cumulativeSpent },
 	];
-
-	let cumulativeAdded = 0;
-	let cumulativeSpent = 0;
 
 	for (const key of sortedBuckets) {
 		const { added, spent } = bucketMap.get(key)!;
