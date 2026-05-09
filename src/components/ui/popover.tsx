@@ -26,8 +26,7 @@ function PopoverContent({
 				const viewportHeight =
 					window.visualViewport?.height ?? window.innerHeight;
 				const nodeRect = node.getBoundingClientRect();
-				const side = node.getAttribute("data-side"); // "top", "bottom", etc.
-
+				
 				// 1. Calculate Available Height based on side
 				let availableHeight: number;
 				if (side === "top") {
@@ -69,7 +68,7 @@ function PopoverContent({
 					// but Radix often handles this. If it doesn't, use 'top'
 					node.style.top = diff > 0 ? `-${diff}px` : "0";
 					node.style.bottom = "auto";
-					node.style.maxHeight = `calc(100vh - ${32}px)`;
+					node.style.maxHeight = "calc(100vh - 32px)";
 				} else {
 					// original
 					node.style.maxHeight =
@@ -82,10 +81,6 @@ function PopoverContent({
 			window.visualViewport?.addEventListener("resize", updatePosition);
 			window.visualViewport?.addEventListener("scroll", updatePosition);
 
-			// Crucial: Radix updates data-side dynamically, so we must observe attributes
-			const observer = new MutationObserver(updatePosition);
-			observer.observe(node, { attributes: true });
-
 			return () => {
 				window.visualViewport?.removeEventListener(
 					"resize",
@@ -95,10 +90,9 @@ function PopoverContent({
 					"scroll",
 					updatePosition,
 				);
-				observer.disconnect();
 			};
 		}
-	}, []);
+	}, [side]);
 	return (
 		<PopoverPrimitive.Portal>
 			<PopoverPrimitive.Content
