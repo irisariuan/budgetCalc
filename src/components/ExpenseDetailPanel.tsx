@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MemberSelect } from "./MemberSelect";
+import { MemberMultiSelect, MemberSelect } from "./MemberSelect";
 import {
 	DateTimePicker,
 	normalizeTimestamp,
@@ -782,52 +782,12 @@ function ExpenseEditContent({ expense, onSaved, onCancel }: EditContentProps) {
 					<div className="space-y-2">
 						<div className="flex items-center justify-between">
 							<Label>Split among</Label>
-							<button
-								type="button"
-								onClick={() =>
-									setSplitAmong(
-										allSelected
-											? []
-											: state.members.map((m) => m.id),
-									)
-								}
-								className="text-xs text-primary hover:underline underline-offset-2"
-							>
-								{allSelected ? "Deselect all" : "Select all"}
-							</button>
 						</div>
-						<div className="rounded-lg border border-input divide-y divide-border overflow-hidden">
-							{state.members.map((m) => {
-								const checked = splitAmong.includes(m.id);
-								return (
-									<label
-										key={m.id}
-										className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
-									>
-										<input
-											type="checkbox"
-											checked={checked}
-											onChange={() => {
-												toggleMember(m.id);
-												if (errors.splitAmong)
-													setErrors((p) => ({
-														...p,
-														splitAmong: "",
-													}));
-											}}
-											className="accent-primary"
-										/>
-										<span
-											className="inline-block size-2.5 rounded-full shrink-0"
-											style={{ backgroundColor: m.color }}
-										/>
-										<span className="flex-1 text-sm">
-											{m.name}
-										</span>
-									</label>
-								);
-							})}
-						</div>
+						<MemberMultiSelect
+							members={state.members}
+							selectedMemberIds={splitAmong}
+							setSelectedMemberIds={setSplitAmong}
+						/>
 						{errors.splitAmong && (
 							<p className="text-sm text-destructive">
 								{errors.splitAmong}

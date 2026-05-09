@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MemberSelect } from "./MemberSelect";
+import { MemberMultiSelect, MemberSelect } from "./MemberSelect";
 import { ImagePlus, X, AlertCircle, CalendarIcon } from "lucide-react";
 import {
 	useRef,
@@ -22,7 +22,11 @@ import {
 	type DragEvent,
 } from "react";
 import { format, parseISO } from "date-fns";
-import { DateTimePicker, DateTimePickerButton, nowTimestamp } from "@/components/DateTimePicker";
+import {
+	DateTimePicker,
+	DateTimePickerButton,
+	nowTimestamp,
+} from "@/components/DateTimePicker";
 import {
 	Popover,
 	PopoverContent,
@@ -280,66 +284,14 @@ export function AddExpenseDialog({
 							<div className="space-y-2">
 								<div className="flex items-center justify-between">
 									<Label>Split among</Label>
-									<button
-										type="button"
-										onClick={toggleAll}
-										className="text-sm text-primary hover:underline underline-offset-2 transition-colors"
-									>
-										{allSelected
-											? "Deselect all"
-											: "Select all"}
-									</button>
 								</div>
 
 								{/* Member checkboxes */}
-								<div className="rounded-lg border border-input divide-y divide-border overflow-hidden">
-									{members.length === 0 ? (
-										<p className="px-3 py-2.5 text-muted-foreground text-center">
-											No members in this room yet.
-										</p>
-									) : (
-										members.map((m) => {
-											const checked = splitAmong.includes(
-												m.id,
-											);
-											return (
-												<label
-													key={m.id}
-													className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
-												>
-													<input
-														type="checkbox"
-														checked={checked}
-														onChange={() => {
-															toggleMember(m.id);
-															if (
-																errors.splitAmong
-															)
-																setErrors(
-																	(p) => ({
-																		...p,
-																		splitAmong:
-																			"",
-																	}),
-																);
-														}}
-														className="accent-primary"
-													/>
-													<span
-														className="inline-block size-2.5 rounded-full shrink-0"
-														style={{
-															backgroundColor:
-																m.color,
-														}}
-													/>
-													<span className="flex-1">
-														{m.name}
-													</span>
-												</label>
-											);
-										})
-									)}
-								</div>
+								<MemberMultiSelect
+									members={members}
+									selectedMemberIds={splitAmong}
+									setSelectedMemberIds={setSplitAmong}
+								/>
 
 								{errors.splitAmong && (
 									<p className="text-sm text-destructive">
