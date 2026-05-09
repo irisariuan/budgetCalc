@@ -31,50 +31,45 @@ useEffect(() => {
     if (!node) return;
 
     const updatePosition = () => {
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const viewport = window.visualViewport;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportTop = viewport?.offsetTop ?? 0; // Important for mobile keyboards
+    
     const nodeRect = node.getBoundingClientRect();
     const side = node.getAttribute('data-side'); 
 
-    // 1. Calculate Available Height (Same as before)
     let availableHeight: number;
+
     if (side === 'top') {
-        availableHeight = nodeRect.bottom - 16;
+        // Space from the top of the viewport to the BOTTOM of the popover (the anchor point)
+        // availableHeight = (Bottom of element) - (Top of viewport) - padding
+        availableHeight = nodeRect.bottom - viewportTop - 16;
     } else {
-        availableHeight = viewportHeight - nodeRect.top - 16;
+        // Space from the TOP of the popover (the anchor point) to the bottom of the viewport
+        // availableHeight = (Viewport Bottom) - (Top of element) - padding
+        availableHeight = (viewportTop + viewportHeight) - nodeRect.top - 16;
     }
 
-    node.style.maxHeight = `${availableHeight}px`;
+    // Apply maxHeight first so content calculation knows the limit
+    node.style.maxHeight = `${Math.max(availableHeight, 0)}px`;
 
-    // 2. Calculate Content Height
-    const heightRequire = Array.from(node.children).reduce((acc, child) => {
-        const childStyle = getComputedStyle(child);
-        const margins = parseFloat(childStyle.marginTop) + parseFloat(childStyle.marginBottom);
-        return acc + (child as HTMLElement).offsetHeight + margins;
-    }, 0);
+    // Calculate the actual height the content wants to be
+    // scrollHeight is more reliable than looping through children
+    const heightRequire = node.scrollHeight;
 
     const diff = heightRequire - availableHeight;
     
-    // 3. Optimized Shift Logic
     if (side === 'top') {
-        if (diff > 0) {
-            // Push UP: Increase bottom offset
-            node.style.bottom = `${diff}px`;
-            // BUG FIX: Ensure we don't have a 'top' value stretching the box
-            node.style.top = 'auto'; 
-        } else {
-            node.style.bottom = '0';
-        }
+        // If content is taller than space, push it down so the top stays in view
+        node.style.bottom = diff > 0 ? `${diff}px` : "0";
+        node.style.top = "auto"; 
     } else if (side === 'bottom') {
-        if (diff > 0) {
-            // Push UP: Apply negative top
-            node.style.top = `-${diff}px`;
-            // BUG FIX: Ensure 'bottom' isn't fighting this
-            node.style.bottom = 'auto';
-        } else {
-            node.style.top = '0';
-        }
+        // If content is taller than space, pull it up so the bottom stays in view
+        node.style.top = diff > 0 ? `-${diff}px` : "0";
+        node.style.bottom = "auto";
     }
 };
+
 
 
     // Setup MutationObserver to watch Radix updates
