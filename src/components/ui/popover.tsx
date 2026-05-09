@@ -23,18 +23,25 @@ function PopoverContent({
 	const measuredRef = useCallback((node: HTMLDivElement | null) => {
 		if (node !== null) {
 			const updatePosition = () => {
-				// 1. Calculate the available space using Visual Viewport
-				// Defaults to window.innerHeight if visualViewport isn't supported
 				const viewportHeight =
 					window.visualViewport?.height ?? window.innerHeight;
 				const nodeRect = node.getBoundingClientRect();
+				const side = node.getAttribute("data-side"); // "top", "bottom", etc.
 
-				// 2. Set dynamic maxHeight relative to the visual viewport
-				// We use the node's current top position relative to the viewport
-				const dynamicMaxHeight = viewportHeight - nodeRect.top - 16;
-				node.style.maxHeight = `${dynamicMaxHeight}px`;
+				// 1. Calculate Available Height based on side
+				let availableHeight: number;
+				if (side === "top") {
+					// Space from viewport top to the bottom of the popover
+					// (minus padding to keep it off the very edge)
+					availableHeight = nodeRect.bottom - 16;
+				} else {
+					// Space from the top of the popover to viewport bottom
+					availableHeight = viewportHeight - nodeRect.top - 16;
+				}
 
-				// 3. Calculate children's required height
+				node.style.maxHeight = `${availableHeight}px`;
+
+				// 2. Calculate Content Height
 				const heightRequire = Array.from(node.children).reduce(
 					(acc, child) => {
 						const childStyle = getComputedStyle(child);
@@ -48,20 +55,31 @@ function PopoverContent({
 					0,
 				);
 
-				// 4. Adjust position if content overflows maxHeight
-				const heightLeft = dynamicMaxHeight;
-				const diff = heightRequire - heightLeft;
-				node.style.bottom = diff > 0 ? `${diff}px` : "0";
+				// 3. Adjust position (the "Shift")
+				// Only apply the 'bottom' offset logic if we are on the bottom side.
+				// If on the top side, Radix usually handles the push-up via its own positioning engine.
+				const diff = heightRequire - availableHeight;
+
+				if (side === "bottom") {
+					node.style.bottom = diff > 0 ? `${diff}px` : "0";
+					node.style.top = "auto"; // Reset top if it was previously set
+				} else if (side === "top") {
+					// When above, if we overflow, we actually want to push the element UP
+					// but Radix often handles this. If it doesn't, use 'top'
+					node.style.top = diff > 0 ? `-${diff}px` : "0";
+					node.style.bottom = "auto";
+				}
 			};
 
-			// Initialize
 			requestAnimationFrame(updatePosition);
 
-			// Handle Safari/Mobile Viewport Resizing (URL bar, Keyboard)
 			window.visualViewport?.addEventListener("resize", updatePosition);
 			window.visualViewport?.addEventListener("scroll", updatePosition);
 
-			// Cleanup function for when node changes or unmounts
+			// Crucial: Radix updates data-side dynamically, so we must observe attributes
+			const observer = new MutationObserver(updatePosition);
+			observer.observe(node, { attributes: true });
+
 			return () => {
 				window.visualViewport?.removeEventListener(
 					"resize",
@@ -71,6 +89,7 @@ function PopoverContent({
 					"scroll",
 					updatePosition,
 				);
+				observer.disconnect();
 			};
 		}
 	}, []);
