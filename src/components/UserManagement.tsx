@@ -422,7 +422,7 @@ export function UserManagement() {
 												<Button
 													type="button"
 													variant="ghost"
-													size="icon-sm"
+													size="icon"
 													onClick={() =>
 														handleEdit(member.id)
 													}
@@ -434,7 +434,7 @@ export function UserManagement() {
 												<Button
 													type="button"
 													variant="ghost"
-													size="icon-sm"
+													size="icon"
 													onClick={() =>
 														handleDeleteRequest(
 															member.id,

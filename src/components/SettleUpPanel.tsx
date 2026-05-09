@@ -107,7 +107,7 @@ export default function SettleUpPanel({
 								</span>
 								<Button
 									variant="ghost"
-									size="icon-sm"
+									size="icon"
 									className="ml-auto shrink-0 text-muted-foreground hover:text-emerald-600"
 									onClick={() => {
 										setProcessingIdx(i);

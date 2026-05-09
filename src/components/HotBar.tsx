@@ -102,7 +102,7 @@ export function HotBar() {
 						<CopyButton
 							text={room.id}
 							successMessage="Room code copied"
-							size="icon-sm"
+							size="icon"
 							ariaLabel="Copy room code"
 						/>
 					</div>
@@ -110,7 +110,7 @@ export function HotBar() {
 					{/* ── Action buttons (center-right) ── */}
 					<div className="flex items-center gap-1.5 shrink-0">
 						<Button
-							size="icon-sm"
+							size="icon"
 							variant="outline"
 							onClick={() => setBudgetOpen(true)}
 							className="lg:px-2 gap-1.5 min-w-fit"
@@ -120,7 +120,7 @@ export function HotBar() {
 						</Button>
 
 						<Button
-							size="icon-sm"
+							size="icon"
 							onClick={() => setExpenseOpen(true)}
 							className="lg:px-2 gap-1.5 min-w-fit"
 						>
@@ -134,7 +134,7 @@ export function HotBar() {
 					{/* ── Leave room (right) ── */}
 					<Button
 						variant="ghost"
-						size="icon-sm"
+						size="icon"
 						onClick={() => actions.leaveRoom()}
 						className="shrink-0 text-muted-foreground hover:text-destructive min-w-fit lg:p-3 gap-2"
 						title="Leave room"

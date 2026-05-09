@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 interface ThemeToggleProps {
 	/** Extra classes forwarded to the Button element. */
 	className?: string;
-	size?: "icon-sm" | "icon";
+	size?: "icon" | "icon";
 }
 
-export function ThemeToggle({ className, size = "icon-sm" }: ThemeToggleProps) {
+export function ThemeToggle({ className, size = "icon" }: ThemeToggleProps) {
 	// Start with undefined so we don't render until we know the real value
 	// (avoids a momentary wrong-icon flash on hydration).
 	const [isDark, setIsDark] = useState<boolean | undefined>(undefined);

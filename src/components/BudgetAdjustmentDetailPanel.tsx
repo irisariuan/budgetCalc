@@ -490,7 +490,7 @@ export function BudgetAdjustmentDetailPanel({
 			{!isEditing ? (
 				<Button
 					variant="ghost"
-					size="icon-sm"
+					size="icon"
 					onClick={() => setIsEditing(true)}
 					aria-label="Edit expense"
 				>
@@ -499,7 +499,7 @@ export function BudgetAdjustmentDetailPanel({
 			) : (
 				<Button
 					variant="ghost"
-					size="icon-sm"
+					size="icon"
 					onClick={() => setIsEditing(false)}
 					aria-label="Cancel editing"
 				>

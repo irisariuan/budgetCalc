@@ -576,7 +576,7 @@ export function AdjustmentDetailPanel({
 			{!isEditing ? (
 				<Button
 					variant="ghost"
-					size="icon-sm"
+					size="icon"
 					onClick={() => setIsEditing(true)}
 					aria-label="Edit adjustment"
 				>
@@ -585,7 +585,7 @@ export function AdjustmentDetailPanel({
 			) : (
 				<Button
 					variant="ghost"
-					size="icon-sm"
+					size="icon"
 					onClick={() => setIsEditing(false)}
 					aria-label="Cancel editing"
 				>

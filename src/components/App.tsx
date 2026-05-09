@@ -80,7 +80,7 @@ function AppInner() {
 					<nav className="flex items-center gap-0.5 shrink-0">
 						<Button
 							variant="ghost"
-							size="icon-sm"
+							size="icon"
 							onClick={() => setPage("home")}
 							title="Dashboard"
 							className={cn(
@@ -93,7 +93,7 @@ function AppInner() {
 						</Button>
 						<Button
 							variant="ghost"
-							size="icon-sm"
+							size="icon"
 							onClick={() => setPage("settings")}
 							title="Room Settings"
 							className={cn(
