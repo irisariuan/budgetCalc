@@ -63,11 +63,17 @@ function PopoverContent({
 				if (side === "bottom") {
 					node.style.bottom = diff > 0 ? `${diff}px` : "0";
 					node.style.top = "auto"; // Reset top if it was previously set
+					node.style.maxHeight = `calc(100vh - ${32}px)`;
 				} else if (side === "top") {
 					// When above, if we overflow, we actually want to push the element UP
 					// but Radix often handles this. If it doesn't, use 'top'
 					node.style.top = diff > 0 ? `-${diff}px` : "0";
 					node.style.bottom = "auto";
+					node.style.maxHeight = `calc(100vh - ${32}px)`;
+				} else {
+					// original
+					node.style.maxHeight =
+						"var(--radix-popover-content-available-height)";
 				}
 			};
 
