@@ -1,7 +1,7 @@
 import { Popover as PopoverPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
-import { useCallback, useEffect, useRef, type ComponentProps } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 
 function Popover({ ...props }: ComponentProps<typeof PopoverPrimitive.Root>) {
 	return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -20,79 +20,46 @@ function PopoverContent({
 	side = "bottom",
 	...props
 }: ComponentProps<typeof PopoverPrimitive.Content>) {
-	const measuredRef = useCallback((node: HTMLDivElement | null) => {
-		if (node !== null) {
-			const updatePosition = () => {
-				const viewportHeight =
-					window.visualViewport?.height ?? window.innerHeight;
-				const nodeRect = node.getBoundingClientRect();
-				
-				// 1. Calculate Available Height based on side
-				let availableHeight: number;
-				if (side === "top") {
-					// Space from viewport top to the bottom of the popover
-					// (minus padding to keep it off the very edge)
-					availableHeight = nodeRect.bottom - 16;
-				} else {
-					// Space from the top of the popover to viewport bottom
-					availableHeight = viewportHeight - nodeRect.top - 16;
-				}
+	const [node, setNode] = useState<HTMLDivElement | null>(null);
 
-				node.style.maxHeight = `${availableHeight}px`;
+	useEffect(() => {
+    if (!node) return;
 
-				// 2. Calculate Content Height
-				const heightRequire = Array.from(node.children).reduce(
-					(acc, child) => {
-						const childStyle = getComputedStyle(child);
-						const margins =
-							parseFloat(childStyle.marginTop) +
-							parseFloat(childStyle.marginBottom);
-						return (
-							acc + child.getBoundingClientRect().height + margins
-						);
-					},
-					0,
-				);
+    const updatePosition = () => {
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const nodeRect = node.getBoundingClientRect();
+        
+        // Use the CSS variable Radix provides if available, 
+        // otherwise calculate based on viewport.
+        const availableHeight = side === "top" 
+            ? nodeRect.bottom - 16 
+            : viewportHeight - nodeRect.top - 16;
 
-				// 3. Adjust position (the "Shift")
-				// Only apply the 'bottom' offset logic if we are on the bottom side.
-				// If on the top side, Radix usually handles the push-up via its own positioning engine.
-				const diff = heightRequire - availableHeight;
+        node.style.setProperty('--custom-available-height', `${availableHeight}px`);
+        
+        // Instead of fighting 'top'/'bottom', use maxHeight
+        node.style.maxHeight = `${availableHeight}px`;
+        node.style.overflowY = 'auto';
+    };
 
-				if (side === "bottom") {
-					node.style.bottom = diff > 0 ? `${diff}px` : "0";
-					node.style.top = "auto"; // Reset top if it was previously set
-					node.style.maxHeight = `calc(100vh - ${32}px)`;
-				} else if (side === "top") {
-					// When above, if we overflow, we actually want to push the element UP
-					// but Radix often handles this. If it doesn't, use 'top'
-					node.style.top = diff > 0 ? `-${diff}px` : "0";
-					node.style.bottom = "auto";
-					node.style.maxHeight = "calc(100vh - 32px)";
-				} else {
-					// original
-					node.style.maxHeight =
-						"var(--radix-popover-content-available-height)";
-				}
-			};
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", updatePosition);
+    viewport?.addEventListener("scroll", updatePosition);
+    
+    // Initial trigger
+    updatePosition();
 
-			requestAnimationFrame(updatePosition);
+    return () => {
+        viewport?.removeEventListener("resize", updatePosition);
+        viewport?.removeEventListener("scroll", updatePosition);
+    };
+}, [node, side]); // Runs whenever the node is set or side changes
 
-			window.visualViewport?.addEventListener("resize", updatePosition);
-			window.visualViewport?.addEventListener("scroll", updatePosition);
+// Attach this to Popover.Content
+	const measuredRef = useCallback((el: HTMLDivElement | null) => {
+    setNode(el);
+	}, []);
 
-			return () => {
-				window.visualViewport?.removeEventListener(
-					"resize",
-					updatePosition,
-				);
-				window.visualViewport?.removeEventListener(
-					"scroll",
-					updatePosition,
-				);
-			};
-		}
-	}, [side]);
 	return (
 		<PopoverPrimitive.Portal>
 			<PopoverPrimitive.Content
